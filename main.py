@@ -1,6 +1,6 @@
 import tkinter as tk
-from ui.sampleScreen import create_ui
+from ui.mainform import open_screen1
 
 root = tk.Tk()
-create_ui(root)
+open_screen1(root)
 root.mainloop()
