@@ -1,20 +1,20 @@
 import boto3
 import json
 
-def test_lambda():
-    client = boto3.client('lambda', region_name='us-east-1')
+def call_lambda():
+    client = boto3.client("lambda", region_name="ap-south-1")
 
-    payload = {
-        "test": "IAM TEST"
-    }
+    payload = {"action": "getTime"}
 
     response = client.invoke(
-        FunctionName='YOUR_LAMBDA_FUNCTION_NAME',
-        InvocationType='RequestResponse',
+        FunctionName="grc-mysql-test",
+        InvocationType="RequestResponse",
         Payload=json.dumps(payload)
     )
 
-    result = json.load(response['Payload'])
-    print("Lambda Response:", result)
+    data = json.loads(response['Payload'].read())
 
-test_lambda()
+    # Parse lambda body JSON
+    body = json.loads(data["body"])
+
+    return body["current_time"]
