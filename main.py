@@ -1,6 +1,7 @@
-import tkinter as tk
-from ui.mainform import open_screen1
+import sys, os
+sys.path.append(os.path.dirname(__file__))
 
-root = tk.Tk()
-open_screen1(root)
-root.mainloop()
+from ui.mainform import start_main_form
+
+# Start main application
+start_main_form()
