@@ -2,11 +2,11 @@ import tkinter as tk
 from brcontrollers.brsample import *
 from brcontrollers.test_lambda import call_lambda
 
-def prompt_Template(root):
+def risk(root):
     root.title("GRC360")
     root.geometry("500x200")
 
-    tk.Label(root, text="Enter your Prompt", font=("Arial", 12)).pack(pady=10)
+    tk.Label(root, text="Enter your Risk", font=("Arial", 12)).pack(pady=10)
 
     entry_name = tk.Entry(root, width=30)
     entry_name.pack()
