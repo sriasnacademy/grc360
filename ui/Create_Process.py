@@ -1,40 +1,42 @@
 import tkinter as tk
 from agents.intent_agent import IntentAgent
-from openai import OpenAI
 
-# ✅ Initialize LLM and Agent properly
-llm_client = OpenAI(api_key="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" \
-"")
-agent = IntentAgent(llm_client)
+agent = IntentAgent()
+
+def submit_text():
+    raw_text = entry.get()
+
+    if not raw_text.strip():
+        status_label.config(text="⚠ Please enter text.")
+        return
+
+    try:
+        intent, status = agent.classify_intent(raw_text)
+
+        intent_label.config(text=f"Detected Intent: {intent}")
+        status_label.config(text=status)
+
+    except Exception as e:
+        status_label.config(text=f"❌ UI Error: {e}")
+
 
 def prompt_Template(root):
+    root.geometry("500x250")
     root.title("GRC360")
-    root.geometry("500x200")
-    
-    # ----- ROW 1 -----
-    label1 = tk.Label(root, text="Enter Text:")
-    label1.grid(row=0, column=0, padx=10, pady=10)
 
-    entry1 = tk.Entry(root, width=25)
-    entry1.grid(row=0, column=1, padx=10, pady=10)
+    tk.Label(root, text="Enter Process / Control Text").pack(pady=5)
 
-    status1 = tk.Label(root, text="")
-    status1.grid(row=0, column=2, padx=10, pady=10)
+    global entry
+    entry = tk.Entry(root, width=60)
+    entry.pack(pady=5)
 
-    # ✅ Button event handler
-    def submit_text():
-        user_input = entry1.get()     # ✅ get text properly
-        if not user_input.strip():
-            status1.config(text="⚠ Enter input")
-            return
+    tk.Button(root, text="Submit", command=submit_text).pack(pady=10)
 
-        intent = agent.classify_intent(user_input)
-        status1.config(text=f"✅ {intent}")
+    # ✅ Labels for output
+    global intent_label, status_label
 
-    # ✅ BUTTON
-    btn1 = tk.Button(
-        root,
-        text="MySQL Submit",
-        command=submit_text
-    )
-    btn1.grid(row=1, column=1, padx=10, pady=10)
+    intent_label = tk.Label(root, text="", fg="blue", font=("Arial", 10, "bold"))
+    intent_label.pack()
+
+    status_label = tk.Label(root, text="", fg="green", font=("Arial", 10))
+    status_label.pack()
