@@ -1,143 +1,185 @@
 import mysql.connector
-from openai import OpenAI
 import json
-# -----------------------------
-# OpenAI Client
-# -----------------------------
-client = OpenAI(api_key="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" \
-"")
+from groq import Groq
+
+# ✅ Groq Client
+client = Groq(api_key="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")
 
 # -----------------------------
-# Database Connection Helper
+# Database Connection
 # -----------------------------
 def get_db():
-    return mysql.connector.connect(
-        host="grc360.cmhggsagqy8d.us-east-1.rds.amazonaws.com",
-        user="admin",
-        password="GoodLuck25",
-        database="DB_GRC360"
-    )
+    print("🔌 Connecting to database...")
+    try:
+        conn = mysql.connector.connect(
+            host="44.218.167.158",
+            user="admin",
+            password="GoodLuck25",
+            database="DB_GRC360",
+            connection_timeout=5,
+            use_pure=True,
+            autocommit=True
+        )
+        print("✅ Database Connected")
+        return conn
+    except mysql.connector.Error as e:
+        print("❌ Database Connection Failed:", e)
+        return None
 
 # -----------------------------
-# Detect Category based on raw text
+# CATEGORY DETECTION USING INTENT
 # -----------------------------
-def detect_category(raw_text):
-    """
-    Simplified: Just return the first template that matches the category name in text,
-    or None if no match. Since we don't have keywords, detection can be basic.
-    """
+def detect_category(intent, raw_text):
     db = get_db()
+    if not db:
+        return None
+
     cursor = db.cursor(dictionary=True)
 
+    # Direct mapping: check if intent matches category
+    cursor.execute("SELECT category FROM prompt_templates WHERE category LIKE %s", (intent,))
+    row = cursor.fetchone()
+    if row:
+        cursor.close()
+        db.close()
+        return row["category"]
+
+    # Fallback: keyword match
     cursor.execute("SELECT category FROM prompt_templates")
-    templates = cursor.fetchall()
+    categories = cursor.fetchall()
+    raw = raw_text.lower()
+    for c in categories:
+        if c["category"].lower() in raw:
+            cursor.close()
+            db.close()
+            return c["category"]
 
     cursor.close()
     db.close()
-
-    raw_lower = raw_text.lower()
-    for temp in templates:
-        if temp["category"].lower() in raw_lower:
-            return temp["category"]
-
-    # If no exact match, return the first category (or None)
-    return templates[0]["category"] if templates else None
+    return categories[0]["category"] if categories else None
 
 # -----------------------------
-# Fetch Template Content
+# FETCH PROMPT TEMPLATE
 # -----------------------------
 def fetch_prompt_template(category):
     db = get_db()
+    if not db:
+        return None
+
     cursor = db.cursor(dictionary=True)
-
     cursor.execute("SELECT content FROM prompt_templates WHERE category=%s", (category,))
-    result = cursor.fetchone()
-
+    template = cursor.fetchone()
     cursor.close()
     db.close()
-
-    return result["content"] if result else None
+    return template["content"] if template else None
 
 # -----------------------------
-# Check if table exists
+# INSERT INTO DB
 # -----------------------------
-def check_table_exists(table_name):
+def insert_into_table(data):
     db = get_db()
+    if not db:
+        return False
+
     cursor = db.cursor()
-
-    query = "SHOW TABLES LIKE %s"
-    cursor.execute(query, (table_name,))
-    exists = cursor.fetchone()
-
-    cursor.close()
-    db.close()
-
-    return exists is not None
-
-# -----------------------------
-# Insert structured data JSON
-# -----------------------------
-def insert_into_table(table_name, data):
-    db = get_db()
-    cursor = db.cursor()
-
     query = """
-        INSERT INTO processes (process_name, description, department, process_owner, frequency, triggers, outcomes)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+      INSERT INTO processes
+      (process_name, description, department,
+       process_owner, frequency, triggers, outcomes)
+      VALUES (%s,%s,%s,%s,%s,%s,%s)
     """
 
+    # Ensure all keys exist with defaults
+    payload = {
+        "process_name": data.get("process_name", ""),
+        "description": data.get("description", ""),
+        "department": data.get("department", ""),
+        "owner": data.get("owner", ""),
+        "frequency": data.get("frequency", ""),
+        "triggers": data.get("triggers", []),
+        "outcomes": data.get("outcomes", [])
+    }
+
     cursor.execute(query, (
-        data.get("process_name"),
-        data.get("description"),
-        data.get("department"),
-        data.get("owner"),
-        data.get("frequency"),
-        ",".join(data.get("triggers")) if isinstance(data.get("triggers"), list) else data.get("triggers"),
-        ",".join(data.get("outcomes")) if isinstance(data.get("outcomes"), list) else data.get("outcomes")
+        payload["process_name"],
+        payload["description"],
+        payload["department"],
+        payload["owner"],
+        payload["frequency"],
+        ",".join(payload["triggers"]),
+        ",".join(payload["outcomes"])
     ))
 
     db.commit()
     cursor.close()
     db.close()
+    return True
 
+# =====================================================
+# ✅ MAIN FUNCTION CALLED FROM INTENT AGENT
+# =====================================================
+def run_pipeline(intent, raw_text):
 
-# ---------------------------------------------------
-# MAIN EXECUTION FLOW
-# ---------------------------------------------------
+    try:
+        print("📤 Received from IntentAgent:", intent)
 
-#raw_text = 
+        # Step 1: Detect category
+        category = detect_category(intent, raw_text)
+        if not category:
+            return "❌ No category mapping found."
+        print("📂 Category:", category)
 
+        # Step 2: Fetch prompt template
+        template = fetch_prompt_template(category)
+        if not template:
+            return "❌ Prompt template not found."
 
-def GetCategoryfromIntentAgent(intent, raw_text):
-    category = intent
-    if not category:
-        print("❌ No matching template found for this text.")
-    exit()
+        # ✅ Strong JSON instruction
+        final_prompt = f"""
+{template}
 
-    print(f"🔍 Detected Category: {category}")
+### Raw Text:
+{raw_text}
 
-    if not check_table_exists(category.lower()):
-        print(f"⚠ Table '{category.lower()}' does not exist. Cannot insert data.")
-    exit()
+### Instructions:
+Return ONLY valid JSON.
+❌ Do NOT wrap in ```json or markdown.
+❌ Do NOT add explanation.
+✅ Output must start with {{ and end with }}.
+"""
 
-    template = fetch_prompt_template(category)
+        # Step 3: Call Groq AI
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": final_prompt}],
+            temperature=0.2
+        )
 
-    final_prompt = f"""
-    {template}
+        output = response.choices[0].message.content.strip()
+        print("📌 AI Output →", output)
 
-    ### Raw Text:
-    {raw_text}
-    """
+        # Step 4: Clean Markdown if present
+        clean = output
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": final_prompt}]
-    )
+        if clean.startswith("```"):
+            clean = clean.replace("```json", "").replace("```", "").strip()
 
-    structured_data = response.choices[0].message.content
-    print("\n📌 Structured Output:\n", structured_data)
+        # Step 5: Parse JSON safely
+        try:
+            data = json.loads(clean)
+        except json.JSONDecodeError as e:
+            print("❌ JSON Parse Error:", e)
+            print("📌 RAW OUTPUT:", output)
+            return "❌ AI returned invalid JSON."
 
-    json_data = json.loads(structured_data)
-    insert_into_table(category.lower(), json_data)
+        # Step 6: Insert into DB
+        success = insert_into_table(data)
+        if success:
+            return "✅ Row inserted successfully into database!"
+        else:
+            return "❌ Failed to insert into DB."
 
-    print("✅ Data successfully inserted into", category.lower(), "table.")
+    except Exception as e:
+        print("❌ Pipeline Crash:", str(e))
+        return f"❌ System Error: {str(e)}"
+
