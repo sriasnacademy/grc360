@@ -1,127 +1,130 @@
-import mysql.connector
 import json
+import boto3
 from groq import Groq
 
-# ✅ Groq Client
+# ----------------------------
+# Groq AI Client
+# ----------------------------
 client = Groq(api_key="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")
 
-# -----------------------------
-# Database Connection
-# -----------------------------
-def get_db():
-    print("🔌 Connecting to database...")
+# ----------------------------
+# AWS Lambda Info
+# ----------------------------
+LAMBDA_NAME = "grc-mysql-test"
+AWS_ACCESS_KEY_ID = "AKIA2OAJTQGXVYLRTKTB"
+AWS_SECRET_ACCESS_KEY = "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"
+AWS_REGION = "ap-south-1"  # change if needed
+
+# ----------------------------
+# Initialize Lambda client
+# ----------------------------
+def get_lambda_client():
     try:
-        conn = mysql.connector.connect(
-            host="44.218.167.158",
-            user="admin",
-            password="GoodLuck25",
-            database="DB_GRC360",
-            connection_timeout=5,
-            use_pure=True,
-            autocommit=True
+        return boto3.client(
+            "lambda",
+            region_name=AWS_REGION,
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
         )
-        print("✅ Database Connected")
-        return conn
-    except mysql.connector.Error as e:
-        print("❌ Database Connection Failed:", e)
-        return None
+    except Exception as e:
+        raise RuntimeError(f"❌ Failed to initialize Lambda client: {str(e)}")
 
-# -----------------------------
-# CATEGORY DETECTION USING INTENT
-# -----------------------------
+
+# ----------------------------
+# Call Lambda function
+# ----------------------------
+def call_lambda(payload):
+    lambda_client = get_lambda_client()
+    try:
+        response = lambda_client.invoke(
+            FunctionName=LAMBDA_NAME,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload)
+        )
+
+        raw = response["Payload"].read().decode("utf-8")
+        data = json.loads(raw)
+
+        if data.get("statusCode") != 200:
+            raise Exception(data.get("body"))
+
+        return json.loads(data["body"])
+
+    except Exception as e:
+        raise RuntimeError(f"❌ Lambda invocation failed: {str(e)}")
+
+
+# ----------------------------
+# Detect category using Lambda
+# ----------------------------
 def detect_category(intent, raw_text):
-    db = get_db()
-    if not db:
-        return None
-
-    cursor = db.cursor(dictionary=True)
-
-    # Direct mapping: check if intent matches category
-    cursor.execute("SELECT category FROM prompt_templates WHERE category LIKE %s", (intent,))
-    row = cursor.fetchone()
-    if row:
-        cursor.close()
-        db.close()
-        return row["category"]
-
-    # Fallback: keyword match
-    cursor.execute("SELECT category FROM prompt_templates")
-    categories = cursor.fetchall()
-    raw = raw_text.lower()
-    for c in categories:
-        if c["category"].lower() in raw:
-            cursor.close()
-            db.close()
-            return c["category"]
-
-    cursor.close()
-    db.close()
-    return categories[0]["category"] if categories else None
-
-# -----------------------------
-# FETCH PROMPT TEMPLATE
-# -----------------------------
-def fetch_prompt_template(category):
-    db = get_db()
-    if not db:
-        return None
-
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT content FROM prompt_templates WHERE category=%s", (category,))
-    template = cursor.fetchone()
-    cursor.close()
-    db.close()
-    return template["content"] if template else None
-
-# -----------------------------
-# INSERT INTO DB
-# -----------------------------
-def insert_into_table(data):
-    db = get_db()
-    if not db:
-        return False
-
-    cursor = db.cursor()
-    query = """
-      INSERT INTO processes
-      (process_name, description, department,
-       process_owner, frequency, triggers, outcomes)
-      VALUES (%s,%s,%s,%s,%s,%s,%s)
-    """
-
-    # Ensure all keys exist with defaults
+    # Direct mapping: intent = category
     payload = {
-        "process_name": data.get("process_name", ""),
-        "description": data.get("description", ""),
-        "department": data.get("department", ""),
-        "owner": data.get("owner", ""),
-        "frequency": data.get("frequency", ""),
-        "triggers": data.get("triggers", []),
-        "outcomes": data.get("outcomes", [])
+        "action": "select",
+        "table": "prompt_templates",
+        "where": {"category": intent}
     }
+    result = call_lambda(payload)
+    if result["count"] > 0:
+        return result["records"][0]["category"]
 
-    cursor.execute(query, (
-        payload["process_name"],
-        payload["description"],
-        payload["department"],
-        payload["owner"],
-        payload["frequency"],
-        ",".join(payload["triggers"]),
-        ",".join(payload["outcomes"])
-    ))
+    # Fallback: keyword matching
+    payload = {
+        "action": "select",
+        "table": "prompt_templates",
+        "columns": ["category"]
+    }
+    result = call_lambda(payload)
+    raw_lower = raw_text.lower()
+    for item in result["records"]:
+        if item["category"].lower() in raw_lower:
+            return item["category"]
 
-    db.commit()
-    cursor.close()
-    db.close()
+    return result["records"][0]["category"] if result["records"] else None
+
+
+# ----------------------------
+# Fetch prompt template using Lambda
+# ----------------------------
+def fetch_prompt_template(category):
+    payload = {
+        "action": "select",
+        "table": "prompt_templates",
+        "where": {"category": category}
+    }
+    result = call_lambda(payload)
+    if result["count"] == 0:
+        return None
+    return result["records"][0]["content"]
+
+
+# ----------------------------
+# Insert into DB using Lambda
+# ----------------------------
+def insert_into_table(data):
+    payload = {
+        "action": "insert",
+        "table": "processes",
+        "data": {
+            "process_name": data.get("process_name", ""),
+            "description": data.get("description", ""),
+            "department": data.get("department", ""),
+            "process_owner": data.get("owner", ""),
+            "frequency": data.get("frequency", ""),
+            "triggers": ",".join(data.get("triggers", [])),
+            "outcomes": ",".join(data.get("outcomes", []))
+        }
+    }
+    call_lambda(payload)
     return True
 
-# =====================================================
-# ✅ MAIN FUNCTION CALLED FROM INTENT AGENT
-# =====================================================
-def run_pipeline(intent, raw_text):
 
+# ----------------------------
+# Main pipeline function
+# ----------------------------
+def run_pipeline(intent, raw_text):
     try:
-        print("📤 Received from IntentAgent:", intent)
+        print("📤 Intent received:", intent)
 
         # Step 1: Detect category
         category = detect_category(intent, raw_text)
@@ -134,7 +137,7 @@ def run_pipeline(intent, raw_text):
         if not template:
             return "❌ Prompt template not found."
 
-        # ✅ Strong JSON instruction
+        # Step 3: Build strong JSON prompt for Groq AI
         final_prompt = f"""
 {template}
 
@@ -143,43 +146,33 @@ def run_pipeline(intent, raw_text):
 
 ### Instructions:
 Return ONLY valid JSON.
-❌ Do NOT wrap in ```json or markdown.
-❌ Do NOT add explanation.
+❌ Do NOT wrap in markdown.
 ✅ Output must start with {{ and end with }}.
 """
 
-        # Step 3: Call Groq AI
-        response = client.chat.completions.create(
+        # Step 4: Call Groq AI
+        response_ai = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": final_prompt}],
             temperature=0.2
         )
 
-        output = response.choices[0].message.content.strip()
-        print("📌 AI Output →", output)
+        output = response_ai.choices[0].message.content.strip()
+        clean = output.replace("```json", "").replace("```", "").strip()
 
-        # Step 4: Clean Markdown if present
-        clean = output
+        # Step 5: Parse AI JSON output
+        data = json.loads(clean)
 
-        if clean.startswith("```"):
-            clean = clean.replace("```json", "").replace("```", "").strip()
+        # Step 6: Insert into DB via Lambda
+        insert_into_table(data)
 
-        # Step 5: Parse JSON safely
-        try:
-            data = json.loads(clean)
-        except json.JSONDecodeError as e:
-            print("❌ JSON Parse Error:", e)
-            print("📌 RAW OUTPUT:", output)
-            return "❌ AI returned invalid JSON."
+        return "✅ Row inserted successfully via Lambda!"
 
-        # Step 6: Insert into DB
-        success = insert_into_table(data)
-        if success:
-            return "✅ Row inserted successfully into database!"
-        else:
-            return "❌ Failed to insert into DB."
+    except json.JSONDecodeError:
+        return "❌ AI returned invalid JSON."
+
+    except RuntimeError as e:
+        return str(e)
 
     except Exception as e:
-        print("❌ Pipeline Crash:", str(e))
-        return f"❌ System Error: {str(e)}"
-
+        return f"❌ Pipeline Error: {str(e)}"
