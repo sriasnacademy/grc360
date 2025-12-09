@@ -40,3 +40,4 @@ def prompt_Template(root):
 
     status_label = tk.Label(root, text="", fg="green", font=("Arial", 10))
     status_label.pack()
+
