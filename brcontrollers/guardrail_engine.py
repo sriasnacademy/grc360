@@ -1,31 +1,52 @@
-from connectors.mysqldb_engine import MySQLDatabase
+from connectors.lambda_mysql import call_lambda
 
 
 class GuardrailEngine:
 
     def __init__(self):
-        self.db = MySQLDatabase()
+        pass   # ✅ No db object anymore
 
     # -----------------------------------------------------
     # LOAD ACTIVE RULES
     # -----------------------------------------------------
     def load_rules(self):
-        sql = "SELECT * FROM guardrail_rules WHERE is_active = TRUE"
-        return self.db.execute_query(sql, fetch=True)
+
+        payload = {
+            "action": "select",
+            "table": "guardrail_rules",
+            "where": {"is_active": 1}
+        }
+
+        result = call_lambda(payload)   # ✅ FUNCTION CALL
+        return result.get("records", [])
 
     # -----------------------------------------------------
     # LOAD CONDITIONS FOR A RULE
     # -----------------------------------------------------
     def load_conditions(self, rule_id):
-        sql = "SELECT * FROM guardrail_conditions WHERE rule_id = %s"
-        return self.db.execute_query(sql, (rule_id,), fetch=True)
+
+        payload = {
+            "action": "select",
+            "table": "guardrail_conditions",
+            "where": {"rule_id": rule_id}
+        }
+
+        result = call_lambda(payload)
+        return result.get("records", [])
 
     # -----------------------------------------------------
     # LOAD ACTIONS FOR A RULE
     # -----------------------------------------------------
     def load_actions(self, rule_id):
-        sql = "SELECT * FROM guardrail_actions WHERE rule_id = %s"
-        return self.db.execute_query(sql, (rule_id,), fetch=True)
+
+        payload = {
+            "action": "select",
+            "table": "guardrail_actions",
+            "where": {"rule_id": rule_id}
+        }
+
+        result = call_lambda(payload)
+        return result.get("records", [])
 
     # -----------------------------------------------------
     # EVALUATE CONDITION
@@ -50,37 +71,36 @@ class GuardrailEngine:
         return False
 
     # -----------------------------------------------------
-    # DUPLICATE PROCESS CHECK IN DB
+    # DUPLICATE PROCESS CHECK
     # -----------------------------------------------------
     def check_duplicate_in_db(self, process_name):
 
-        sql = "SELECT * FROM processes WHERE process_name = %s"
-        result = self.db.execute_query(sql, (process_name,), fetch=True)
+        payload = {
+            "action": "select",
+            "table": "processes",
+            "where": {"process_name": process_name}
+        }
 
-        return len(result) > 0
+        result = call_lambda(payload)
+        return len(result.get("records", [])) > 0
 
     # -----------------------------------------------------
-    # MAIN EVALUATION METHOD (ONLY CHECK RULES)
+    # MAIN GUARDRAIL EXECUTION
     # -----------------------------------------------------
     def evaluate(self, payload):
 
         rules = self.load_rules()
 
         for rule in rules:
+
             rule_id = rule["rule_id"]
             conditions = self.load_conditions(rule_id)
-
             rule_triggered = True
 
             for cond in conditions:
 
-                # Duplicate detection special rule
                 if cond["condition_key"] == "process_name" and cond["operator"] == "contains":
-                    if self.check_duplicate_in_db(payload["process_name"]):
-                        rule_triggered = True
-                    else:
-                        rule_triggered = False
-
+                    rule_triggered = self.check_duplicate_in_db(payload["process_name"])
                 else:
                     if not self.evaluate_condition(cond, payload):
                         rule_triggered = False
@@ -89,13 +109,10 @@ class GuardrailEngine:
                 actions = self.load_actions(rule_id)
                 return self.execute_actions(actions, rule["rule_name"])
 
-        return {
-            "allowed": True,
-            "message": "All guardrails passed."
-        }
+        return {"allowed": True, "message": "All guardrails passed."}
 
     # -----------------------------------------------------
-    # EXECUTE RULE ACTIONS
+    # EXECUTE ACTIONS
     # -----------------------------------------------------
     def execute_actions(self, actions, rule_name):
 
@@ -109,32 +126,39 @@ class GuardrailEngine:
 
         return {
             "allowed": True,
-            "message": "Rule triggered but not blocking.",
+            "message": "Rule triggered but not blocking",
             "rule": rule_name
         }
 
     # -----------------------------------------------------
-    # INSERT PROCESS INTO DB (NEW)
+    # INSERT PROCESS
     # -----------------------------------------------------
     def insert_process(self, pname):
 
-        sql = """
-            INSERT INTO processes 
-            (process_name, description, department, process_owner, frequency, triggers, outcomes)
-            VALUES (%s,%s,%s,%s,%s,%s,%s)
-        """
+        payload = {
+            "action": "insert",
+            "table": "processes",
+            "data": {
+                "process_name": pname,
+                "description": "",
+                "department": "",
+                "process_owner": "",
+                "frequency": "",
+                "triggers": "",
+                "outcomes": ""
+            }
+        }
 
-        data = (pname, "", "", "", "", "", "")
-        self.db.execute_query(sql, data)
+        return call_lambda(payload)
 
     # -----------------------------------------------------
-    # FINAL METHOD – USED BY UI
+    # FINAL ENTRY POINT (UI)
     # -----------------------------------------------------
     def submit(self, pname):
 
         payload = {"process_name": pname}
 
-        # 1. Run guardrails
+        # 1. Rule Check
         result = self.evaluate(payload)
 
         if not result["allowed"]:
@@ -143,15 +167,9 @@ class GuardrailEngine:
                 "message": result["message"]
             }
 
-        # 2. Safe → Insert into DB
+        # 2. Insert Process
         try:
             self.insert_process(pname)
-            return {
-                "success": True,
-                "message": "Process saved successfully!"
-            }
+            return {"success": True, "message": "Process saved successfully!"}
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"DB Error: {e}"
-            }
+            return {"success": False, "message": f"Lambda DB Error: {e}"}

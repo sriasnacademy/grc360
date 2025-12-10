@@ -1,35 +1,44 @@
-from connectors.mysqldb_engine import MySQLDatabase
+from connectors.lambda_mysql import call_lambda
 
 class GetProcess:
 
-    def __init__(self):
-        self.db = MySQLDatabase()
-
     def fetch_all_processes(self):
         """
-        Return rows as tuples (not dictionary)
+        Returns list of tuples exactly as DB used to return
+        (process_id, process_name, description, department, owner, frequency, triggers, outcomes)
         """
-        try:
-            conn = self.db.get_connection()
-            cursor = conn.cursor()  # <-- NOT dictionary=True
 
-            sql = """
-                SELECT process_id, process_name, description, department,
-                       process_owner, frequency, triggers, outcomes
-                FROM processes
-            """
-            cursor.execute(sql)
-            rows = cursor.fetchall()   # returns list of tuples
+        payload = {
+            "action": "select",
+            "table": "processes",
+            "columns": [
+                "process_id", "process_name", "description", "department",
+                "process_owner", "frequency", "triggers", "outcomes"
+            ]
+        }
+
+        try:
+            response = call_lambda(payload)
+
+            records = response.get("records", [])
+
+            # Convert dict rows to tuples like DB
+            rows = [
+                (
+                    r.get("process_id"),
+                    r.get("process_name"),
+                    r.get("description"),
+                    r.get("department"),
+                    r.get("process_owner"),
+                    r.get("frequency"),
+                    r.get("triggers"),
+                    r.get("outcomes")
+                )
+                for r in records
+            ]
 
             return rows
 
         except Exception as e:
-            print("Error:", e)
+            print("❌ Lambda Fetch Error:", e)
             return []
-
-        finally:
-            try:
-                cursor.close()
-                conn.close()
-            except:
-                pass
