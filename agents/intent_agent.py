@@ -1,78 +1,47 @@
 import json
-import mysql.connector
 from models.my_llm_client import LLMClient
+from connectors.lambda_mysql import call_lambda
 from agents.prompt_engineering.system_prompts import run_pipeline
 
 
 class IntentAgent:
 
-    # -----------------------------
-    # Database Connection
-    # -----------------------------
-    @staticmethod
-    def get_db():
-        print("🔌 Connecting to database...")
-        try:
-            conn = mysql.connector.connect(
-                host="44.218.167.158",
-                user="admin",
-                password="GoodLuck25",
-                database="DB_GRC360",
-                connection_timeout=5,
-                use_pure=True,
-                autocommit=True
-            )
-            print("✅ Database Connected")
-            return conn
-        except mysql.connector.Error as e:
-            print("❌ Database Connection Failed:", e)
-            return None
-
-    # -----------------------------
-    # Fetch Intent Prompt Template
-    # -----------------------------
-    @staticmethod
-    def fetch_prompt_template(category="INTENT_CLASSIFICATION"):
-
-        db = IntentAgent.get_db()
-        if not db:
-            return None
-
-        # ✅ buffered=True fixes "Unread result found"
-        cursor = db.cursor(dictionary=True, buffered=True)
-
-        cursor.execute(
-            "SELECT content FROM prompt_templates WHERE category=%s",
-            (category,)
-        )
-
-        rows = cursor.fetchall()   # ✅ Read ALL rows
-
-        cursor.close()
-        db.close()
-
-        return rows[0]["content"] if rows else None
-
-    # -----------------------------
-    # Init
-    # -----------------------------
     def __init__(self):
         self.llm = LLMClient()
 
-    # -----------------------------
-    # Intent Detection
-    # -----------------------------
+
+    # ----------------------------------------------
+    # FETCH INTENT PROMPT TEMPLATE FROM LAMBDA
+    # ----------------------------------------------
+    @staticmethod
+    def fetch_prompt_template(category="INTENT_CLASSIFICATION"):
+
+        payload = {
+            "action": "select",
+            "table": "prompt_templates",
+            "where": { "category": category }
+        }
+
+        data = call_lambda(payload)
+
+        if data.get("count", 0) == 0:
+            return None
+
+        return data["records"][0]["content"]
+
+
+    # ----------------------------------------------
+    # DETECT INTENT
+    # ----------------------------------------------
     def classify_intent(self, raw_text):
 
         try:
-            # ✅ Fetch intent prompt from DB
-            template = IntentAgent.fetch_prompt_template("INTENT_CLASSIFICATION")
+            template = self.fetch_prompt_template("INTENT_CLASSIFICATION")
 
             if not template:
-                print("⚠ INTENT_CLASSIFICATION template missing in DB.")
-                return "OTHER", "❌ Intent prompt missing in database"
+                return "OTHER", "❌ INTENT template missing in DB"
 
-            # ✅ Construct prompt
+            # ✅ PROMPT
             prompt = f"""
 {template}
 
@@ -81,44 +50,31 @@ class IntentAgent:
 
 ### Rules:
 Return STRICT JSON only.
-Do NOT wrap in markdown.
+No markdown.
 Format:
 {{ "intent": "VALUE" }}
 """
 
-            # ✅ Call LLM
             response = self.llm.generate(prompt)
 
-            print("🔎 RAW INTENT RESPONSE:", repr(response))
+            print("🔍 RAW INTENT AI:", repr(response))
 
-            # ✅ Handle empty output
-            if not response or response.strip() == "":
-                intent = "OTHER"
-            else:
-                clean = response.strip()
+            intent = "OTHER"
 
-                # ✅ Remove markdown fences if any
-                if clean.startswith("```"):
-                    clean = clean.replace("```json", "").replace("```", "").strip()
-
-                # ✅ Parse JSON
+            if response:
+                clean = response.replace("```json","").replace("```","").strip()
                 try:
                     parsed = json.loads(clean)
                     intent = parsed.get("intent", "OTHER")
-                except Exception as e:
-                    print("❌ JSON PARSE ERROR:", e)
-                    intent = "OTHER"
+                except:
+                    pass
 
-            print("🧠 Intent Detected:", intent)
+            print("✅ INTENT:", intent)
 
-            # ✅ Call pipeline
-            status = run_pipeline(intent, raw_text)
-
-            if not status:
-                status = "⚠ System returned no response."
-
-            return intent, status
+            # ✅ RUN CORE PIPELINE
+            result = run_pipeline(intent, raw_text)
+            return intent, result or "⚠ No response from pipeline"
 
         except Exception as e:
-            print("❌ INTENT AGENT CRASH:", str(e))
-            return "OTHER", f"❌ Intent Agent Error: {str(e)}"
+            print("❌ INTENT AGENT ERROR:", str(e))
+            return "OTHER", f"❌ IntentAgent crash: {e}"
