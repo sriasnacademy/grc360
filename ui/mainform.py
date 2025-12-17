@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import Menu, ttk, scrolledtext
 
-from ui.sampleScreen import create_ui
+from ui.postgresUI import create_ui
 from ui.guardrails_process import open_process_screen
 from ui.Create_Process import prompt_Template
 from ui.View_Process import open_view_process_screen
