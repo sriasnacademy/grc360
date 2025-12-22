@@ -5,9 +5,22 @@ import boto3
 
 
 class PGVectorDB:
-    def __init__(self, function_name="grc-vectordb"):
-        self.lambda_client = boto3.client("lambda")
+
+    #def __init__(self, function_name="grc-vectordb"):
+    #   self.lambda_client = boto3.client("lambda") 
+    #   self.function_name = function_name
+
+    def __init__(self, function_name="grc-vectordb"):   #Meghana
         self.function_name = function_name
+        self.lambda_client = None
+
+    def _get_lambda_client(self):
+        if self.lambda_client is None:
+            self.lambda_client = boto3.client(
+                "lambda",
+                region_name="ap-south-1"
+            )
+        return self.lambda_client   #Meghana
 
     def execute(self, query: str, params=None):
         """
