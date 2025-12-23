@@ -1,15 +1,10 @@
 from connectors.lambda_mysql import call_lambda
-from difflib import SequenceMatcher
 
 
 class GuardrailEngine:
 
     def __init__(self):
         pass   # ✅ No db object anymore
-
-
-    def fuzzy_match(self, a, b):
-        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
     # -----------------------------------------------------
     # LOAD ACTIVE RULES
@@ -79,24 +74,15 @@ class GuardrailEngine:
     # DUPLICATE PROCESS CHECK
     # -----------------------------------------------------
     def check_duplicate_in_db(self, process_name):
+
         payload = {
             "action": "select",
-            "table": "processes"
+            "table": "processes",
+            "where": {"process_name": process_name}
         }
 
         result = call_lambda(payload)
-        records = result.get("records", [])
-
-        for row in records:
-            db_name = row.get("process_name", "")
-            score = self.fuzzy_match(process_name, db_name)
-
-            # Threshold: 80% similarity
-            if score >= 0.80:
-                return True
-
-        return False
-
+        return len(result.get("records", [])) > 0
 
     # -----------------------------------------------------
     # MAIN GUARDRAIL EXECUTION
