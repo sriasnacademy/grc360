@@ -1,30 +1,32 @@
-from groq import Groq
+from huggingface_hub import InferenceClient
+
 
 class LLMClient:
-
     def __init__(self):
-        self.client = Groq(api_key="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")
+        self.client = InferenceClient(
+            model="meta-llama/Meta-Llama-3-8B-Instruct",
+            token="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"
+        )
 
-    def generate(self, prompt):
-
-        print("⚡ Calling Groq LLM...")
+    def generate(self, prompt: str) -> str:
+        print("⚡ Calling Hugging Face LLM...")
         print("📨 Prompt Sent:", prompt[:200], "...")
 
         try:
-            response = self.client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
+            response = self.client.chat_completion(
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0,
+                max_tokens=1024
             )
-
-            print("✅ Groq Response Received")
-            print("📦 Full Response Object:", response)
 
             content = response.choices[0].message.content.strip()
 
+            print("✅ Hugging Face Response Received")
             print("📄 LLM Output:", repr(content))
             return content
 
         except Exception as e:
-            print("❌ Groq Failed:", e)
+            print("❌ Hugging Face Failed:", e)
             return ""
