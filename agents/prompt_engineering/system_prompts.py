@@ -5,7 +5,7 @@ import json
 # ----------------------------
 # Groq AI Client
 # ----------------------------
-client = Groq(api_key="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")
+client = Groq(api_key="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")
 
 # ----------------------------
 # Detect category using Lambda
