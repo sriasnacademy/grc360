@@ -2,49 +2,50 @@
 
 import json
 import boto3
+from botocore.exceptions import NoCredentialsError, ClientError
 
 
 class PGVectorDB:
-
-    #def __init__(self, function_name="grc-vectordb"):
-    #   self.lambda_client = boto3.client("lambda") 
-    #   self.function_name = function_name
-
-    def __init__(self, function_name="grc-vectordb"):   #Meghana
+    def __init__(self, function_name, region="ap-south-1"):
         self.function_name = function_name
-        self.lambda_client = None
 
-    def _get_lambda_client(self):
-        if self.lambda_client is None:
+        try:
             self.lambda_client = boto3.client(
                 "lambda",
-                region_name="ap-south-1"
+                region_name=region
             )
-        return self.lambda_client   #Meghana
+        except Exception as e:
+            raise RuntimeError(f"Failed to create Lambda client: {e}")
 
     def execute(self, query: str, params=None):
-        """
-        Calls AWS Lambda and returns rows.
-        """
+        if not self.lambda_client:
+            raise RuntimeError("Lambda client not initialized")
+
         payload = {
             "query": query,
             "params": params
         }
 
-        response = self.lambda_client.invoke(
-            FunctionName=self.function_name,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(payload)
-        )
+        try:
+            response = self.lambda_client.invoke(
+                FunctionName=self.function_name,
+                InvocationType="RequestResponse",
+                Payload=json.dumps(payload)
+            )
+        except NoCredentialsError:
+            raise RuntimeError(
+                "AWS credentials not found. Run `aws configure`."
+            )
+        except ClientError as e:
+            raise RuntimeError(f"AWS Lambda invoke failed: {e}")
 
         response_payload = json.loads(response["Payload"].read())
 
         if response.get("FunctionError"):
-            raise Exception(response_payload)
+            raise RuntimeError(response_payload)
 
         body = response_payload.get("body")
 
-        # body may be string (API Gateway style)
         if isinstance(body, str):
             body = json.loads(body)
 
