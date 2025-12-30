@@ -5,6 +5,7 @@ from ui.postgresUI import create_ui
 from ui.guardrails_process import open_process_screen
 from ui.Create_Process import prompt_Template
 from ui.View_Process import open_view_process_screen
+from ui.Create_Risk import risk
 
 # ------------------------------
 # AI ASSISTANT WORKSPACE CLASS
@@ -125,6 +126,9 @@ def prompt_Template_Screen():
 def View_Process_Screen():
     open_view_process_screen(tk.Toplevel())
 
+def Create_Risk_Screen():
+    risk(tk.Toplevel())
+
 # ------------------------------
 # MAIN FORM WITH MENU + WORKSPACE
 # ------------------------------
@@ -158,6 +162,8 @@ def start_main_form():
 
     # Risk menu
     risk_menu = Menu(menubar, tearoff=0)
+    risk_menu.add_command(label="Create Risk", command=Create_Risk_Screen)
+    risk_menu.add_command(label="View Risk", command=View_Process_Screen)
     menubar.add_cascade(label="Risk", menu=risk_menu)
 
     # Control menu
