@@ -1,7 +1,7 @@
 import json
 from models.my_llm_client import LLMClient
 from connectors.lambda_mysql import call_lambda
-from agents.prompt_engineering.system_prompts import run_pipeline
+from agents.prompt_engineering.system_prompts import route_pipeline
 
 
 class IntentAgent:
@@ -72,7 +72,7 @@ Format:
             print("✅ INTENT:", intent)
 
             # ✅ RUN CORE PIPELINE
-            result = run_pipeline(intent, raw_text)
+            result = route_pipeline(intent, raw_text)
             return intent, result or "⚠ No response from pipeline"
 
         except Exception as e:
