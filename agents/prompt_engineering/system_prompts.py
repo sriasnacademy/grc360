@@ -1,5 +1,6 @@
 from agents.prompt_engineering.process_pipeline import run_process_pipeline
 from agents.prompt_engineering.risk_pipeline import run_risk_pipeline
+from agents.prompt_engineering.control_pipeline import run_control_pipeline
 
 def route_pipeline(intent: str, raw_text: str):
     intent = intent.upper()
@@ -11,6 +12,9 @@ def route_pipeline(intent: str, raw_text: str):
 
     elif intent == "CREATE_RISK":
         return run_risk_pipeline(intent, raw_text)
+    
+    elif intent == "CREATE_CONTROL":
+        return run_control_pipeline(intent, raw_text)
 
     else:
         return "⚠ Intent not supported"
