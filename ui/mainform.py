@@ -7,12 +7,21 @@ from ui.Create_Process import prompt_Template
 from ui.View_Process import open_view_process_screen
 from ui.Create_Risk import risk
 from ui.Create_Control import create_control
+from ui.Create_subprocess import create_subporcess
+from agents.intent_agent import IntentAgent
+
+agent = IntentAgent()
 
 # ------------------------------
 # AI ASSISTANT WORKSPACE CLASS
 # ------------------------------
 class GRC360ChatModel:
+
+    global status_label,intent_label
     def __init__(self, workspace):
+        self.user_input = tk.Entry(width=80)
+        self.intent_label = tk.Label(text="Detected Intent: -")
+        self.status_label = tk.Label(text="")
 
         workspace.configure(bg="#F2F4F7")
 
@@ -110,19 +119,19 @@ class GRC360ChatModel:
         )
 
         self.chat_box.tag_configure(
-             "left_msg",
+           "assistant_msg",
             justify="left",
-            lmargin1=5,
-            lmargin2=5,
-            rmargin=80
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=120
         )
 
         self.chat_box.tag_configure(
-            "right_msg",
-            justify="right",
-            lmargin1=80,
-            lmargin2=80,
-            rmargin=5
+            "user_msg",
+            justify="left",      # text alignment
+            lmargin1=120,        # PUSH message to right
+            lmargin2=120,
+            rmargin=10
         )
 
 
@@ -146,14 +155,14 @@ class GRC360ChatModel:
 
         self.user_input = tk.Entry(input_frame, font=("Arial", 12))
         self.user_input.pack(side="left", fill="x", expand=True, padx=5)
-        self.user_input.bind("<Return>", lambda e: self.send_message())
+        self.user_input.bind("<Return>", lambda e: self.submit_text_Meghana())
 
         tk.Button(
             input_frame,
             text="Send",
             bg="#2563EB",
             fg="white",
-            command=self.send_message
+            command=self.submit_text_Meghana
         ).pack(side="right", padx=5)
 
     # -----------------------------------
@@ -198,7 +207,38 @@ class GRC360ChatModel:
 
         response = f"[Module: {module} | Guardrails {gr}]\nProcessed: {text}"
         self.append_chat("Assistant", response)
+    # -----------------------------------
+    # Meghana
+    # -----------------------------------
+    def submit_text_Meghana(self):
+        raw_text = self.user_input.get().strip()
 
+        if not raw_text:
+            self.status_label.config(text="⚠ Please enter text.")
+            return
+
+    # Show user message (RIGHT side)
+        self.append_chat("You", raw_text)
+        self.user_input.delete(0, tk.END)
+
+        try:
+        # Call intent agent
+            intent, assistant_response = agent.classify_intent(raw_text)
+
+        # Update labels
+            self.intent_label.config(text=f"Detected Intent: {intent}")
+            self.status_label.config(text="✅ Response generated")
+
+        # 🔥 SHOW ASSISTANT RESPONSE (LEFT side)
+            self.append_chat("Assistant", assistant_response)
+
+        except Exception as e:
+            self.status_label.config(text=f"❌ UI Error: {e}")
+            self.append_chat("Assistant", f"❌ Error: {e}")
+
+    # -----------------------------------
+    # End Meghana
+    # -----------------------------------
     def append_chat(self, role, message):
         self.chat_box.config(state="normal")
 
@@ -206,17 +246,18 @@ class GRC360ChatModel:
             self.chat_box.insert(
                 tk.END,
                 f"You: {message}\n\n",
-                "right_msg"
+                "user_msg"
             )
         else:
             self.chat_box.insert(
                 tk.END,
                 f"{role}: {message}\n\n",
-                "left_msg"
+                "assistant_msg"
             )
 
         self.chat_box.config(state="disabled")
         self.chat_box.yview(tk.END)
+
 
 # ------------------------------
 # FUNCTIONS TO OPEN SCREENS
@@ -238,6 +279,9 @@ def View_Process_Screen():
 
 def Create_Risk_Screen():
     risk(tk.Toplevel())
+
+def Create_SubProcess():
+    create_subporcess(tk.Toplevel())
 
 # ------------------------------
 # MAIN FORM WITH MENU + WORKSPACE
@@ -285,22 +329,27 @@ def start_main_form():
     aduit_menu = Menu(menubar, tearoff=0)
     menubar.add_cascade(label="Audit", menu=aduit_menu)
 
+    # Control menu
+    subprocess_menu = Menu(menubar, tearoff=0)
+    subprocess_menu.add_command(label="Create Subprocess", command=Create_SubProcess)
+    menubar.add_cascade(label="Sub Process", menu=subprocess_menu)
+
     # -----------------------------
     # Process1 Menu
     # -----------------------------
-    process1_menu = Menu(menubar, tearoff=0)
-    menubar.add_cascade(label="Process1", menu=process1_menu)
+    #process1_menu = Menu(menubar, tearoff=0)
+    #menubar.add_cascade(label="Process1", menu=process1_menu)
 
-    process1_menu.add_command(label="Create Process")
+    #process1_menu.add_command(label="Create Process")
 
     # -----------------------------
     # Sub Process Menu (inside Process1)
     # ----------------------------- 
-    subprocess_menu = Menu(process1_menu, tearoff=0)
-    process1_menu.add_cascade(label="Sub Process", menu=subprocess_menu)
+    #subprocess_menu = Menu(process1_menu, tearoff=0)
+    #process1_menu.add_cascade(label="Sub Process", menu=subprocess_menu)
 
-    subprocess_menu.add_command(label="SubProcess1")
-    subprocess_menu.add_command(label="SubProcess2")
+    #subprocess_menu.add_command(label="SubProcess1")
+    #subprocess_menu.add_command(label="SubProcess2")
     
 
     root.config(menu=menubar)
