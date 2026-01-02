@@ -8,10 +8,11 @@ from connectors.lambda_mysql import call_lambda
 # -----------------------------------------
 client = Groq(api_key="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")
 
+
 # -----------------------------------------
 # FETCH SUBPROCESS PROMPT TEMPLATE
 # -----------------------------------------
-def fetch_risk_template(intent):
+def fetch_sub_porcess_template(intent):
     payload = {
         "action": "select",
         "table": "prompt_templates",
@@ -19,6 +20,7 @@ def fetch_risk_template(intent):
     }
     result = call_lambda(payload)
     return result["records"][0]["content"] if result.get("count", 0) > 0 else None
+
 
 # -----------------------------------------
 # SAFE JSON PARSER (KEEP AS IS – GOOD)
@@ -43,56 +45,63 @@ def safe_json_parse(text: str):
         print("❌ RAW TEXT:", repr(text))
         return None
 
+
 # -----------------------------------------
 # NORMALIZE SUBPROCESS DATA (🔥 KEY FIX)
 # -----------------------------------------
-def normalize_risk_data(data: dict):
+def normalize_subprocess_data(data: dict):
     if not data:
         return None
 
-    # Ensure all string fields are stripped and cleaned
-    for key in ["risk_name", "description", "cause", "impact", "likelihood", "mitigation", "status", "owner", "severity"]:
-        if key in data and isinstance(data[key], str):
-            # Remove extra spaces and line breaks
-            data[key] = " ".join(data[key].split()).strip()
+    # Convert outcomes list → string
+    if isinstance(data.get("outcomes"), list):
+        data["outcomes"] = ", ".join(data["outcomes"])
 
-    # Capitalize status
+    # Remove line breaks & extra spaces
+    if "description" in data:
+        data["description"] = " ".join(data["description"].split())
+
+    # Normalize case
+    data["frequency"] = data.get("frequency", "").capitalize()
     data["status"] = data.get("status", "Active").capitalize()
 
-    # Optionally capitalize likelihood if you want consistency
-    if "likelihood" in data:
-        data["likelihood"] = data["likelihood"].capitalize()
+    # Ensure FK is int
+    data["process_id"] = int(data.get("process_id", 1))
 
-    return data # -----------------------------------------
-# INSERT RISK
+    return data
+
+
 # -----------------------------------------
-def insert_risk(data):
+# INSERT SUBPROCESS
+# -----------------------------------------
+def insert_subprocess(data):
     payload = {
-       "action": "insert",
-        "table": "risk",
+        "action": "insert",
+        "table": "sub_processes",
         "data": {
-            "risk_name": data.get("risk_name", ""),
+            "sub_process_name": data.get("sub_process_name", ""),
+            "process_id": data.get("process_id", 1),
             "description": data.get("description", ""),
-            "cause": data.get("cause", ""),
-            "impact": data.get("impact", ""),
-            "likelihood": data.get("likelihood", ""),
-            "mitigation": data.get("mitigation", ""),
-            "status": data.get("status", ""),
-            "owner": data.get("owner", ""),
-            "severity": data.get("severity", "")
+            "department": data.get("department", ""),
+            "sub_process_owner": data.get("sub_process_owner", ""),
+            "frequency": data.get("frequency", ""),
+            "triggers": data.get("triggers", ""),
+            "outcomes": data.get("outcomes", ""),
+            "status": data.get("status", "Active"),
         }
     }
 
     call_lambda(payload)
 
+
 # -----------------------------------------
 # MAIN SUBPROCESS PIPELINE
 # -----------------------------------------
-def run_risk_pipeline(intent, raw_text):
+def run_subporcess_pipeline(intent, raw_text):
     try:
-        template = fetch_risk_template(intent)
+        template = fetch_sub_porcess_template(intent)
         if not template:
-            return "❌ Risk template missing"
+            return "❌ Subprocess template missing"
 
         prompt = f"""
 {template}
@@ -114,21 +123,19 @@ def run_risk_pipeline(intent, raw_text):
         )
 
         raw_output = response.choices[0].message.content
-        print("🔍 RAW RISK RESPONSE:", repr(raw_output))
+        print("🔍 RAW SUBPROCESS RESPONSE:", repr(raw_output))
 
         parsed_data = safe_json_parse(raw_output)
         if not parsed_data:
             return "❌ Invalid JSON returned by LLM"
 
-        cleaned_data = normalize_risk_data(parsed_data)
+        cleaned_data = normalize_subprocess_data(parsed_data)
         if not cleaned_data:
-            return "❌ RISK data normalization failed"
+            return "❌ Subprocess data normalization failed"
 
-        insert_risk(cleaned_data)
+        insert_subprocess(cleaned_data)
 
-        return "✅ RISK inserted successfully"
+        return "✅ Subprocess inserted successfully"
 
     except Exception as e:
-        return f"❌ RISK Pipeline Error: {str(e)}"
-
-
+        return f"❌ Subprocess Pipeline Error: {str(e)}"

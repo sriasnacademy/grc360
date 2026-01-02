@@ -5,7 +5,7 @@ from connectors.lambda_mysql import call_lambda
 client = Groq(api_key="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")
 
 
-def fetch_control_template(intent):
+def fetch_test_plan_template(intent):
     payload = {
         "action": "select",
         "table": "prompt_templates",
@@ -17,32 +17,33 @@ def fetch_control_template(intent):
 # -----------------------------------------
 # NORMALIZE CONTROL DATA
 # -----------------------------------------
-def normalize_control_data(data: dict):
+def normalize_test_plan_data(data: dict):
     if not data:
         return None
 
     # Clean and strip string fields
-    for key in ["control_name", "description", "control_type", "control_category"]:
+    for key in ["test_plan_name", "description", "module", "status"]:
         if key in data and isinstance(data[key], str):
             data[key] = " ".join(data[key].split()).strip()
-
+    # Capitalize status
+    data["status"] = data.get("status", "Active").capitalize()
     # Capitalize type and category for consistency
-    if "control_type" in data and data["control_type"]:
-        data["control_type"] = data["control_type"].capitalize()
-    if "control_category" in data and data["control_category"]:
-        data["control_category"] = data["control_category"].capitalize()
+    if "test_plan_name" in data and data["test_plan_name"]:
+        data["test_plan_name"] = data["test_plan_name"].capitalize()
+    if "module" in data and data["module"]:
+        data["module"] = data["module"].capitalize()
 
     return data
 
-def insert_control(data):
+def insert_test_plan(data):
     payload = {
         "action": "insert",
-        "table": "control",
+        "table": "test_plan",
         "data": {
-            "control_name": data.get("control_name", ""),
+            "test_plan_name": data.get("test_plan_name", ""),
             "description": data.get("description", ""),
-            "control_type": data.get("control_type", ""),
-            "control_category": data.get("control_category", "")
+            "module": data.get("module", ""),
+            "status": data.get("status", "Active")
         }
     }
     call_lambda(payload)
@@ -68,11 +69,11 @@ def safe_json_parse(text: str):
         return None
 
 
-def run_control_pipeline(intent, raw_text):
+def run_test_plan_pipeline(intent, raw_text):
     try:
-        template = fetch_control_template(intent)
+        template = fetch_test_plan_template(intent)
         if not template:
-            return "❌ control template missing"
+            return "❌ Test Plan template missing"
 
         prompt = f"""
 {template}
@@ -92,19 +93,19 @@ No explanation.
         )
 
         raw_output = response.choices[0].message.content
-        print("🔍 RAW Control RESPONSE:", repr(raw_output))
+        print("🔍 RAW Test Plan RESPONSE:", repr(raw_output))
 
         parsed_data = safe_json_parse(raw_output)
         if not parsed_data:
             return "❌ Invalid JSON returned by LLM"
 
-        cleaned_data = normalize_control_data(parsed_data)
+        cleaned_data = normalize_test_plan_data(parsed_data)
         if not cleaned_data:
-            return "❌ Control data normalization failed"
+            return "❌ Test Plan data normalization failed"
 
-        insert_control(cleaned_data)
+        insert_test_plan(cleaned_data)
 
-        return "✅ Control inserted successfully"
+        return "✅ Test Plan inserted successfully"
 
     except Exception as e:
-        return f"❌ Control Pipeline Error: {str(e)}"
+        return f"❌ Test Plan Pipeline Error: {str(e)}"

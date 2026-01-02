@@ -5,7 +5,7 @@ import json
 # ----------------------------
 # Groq AI Client
 # ----------------------------
-client = Groq(api_key="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")
+client = Groq(api_key="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")
 
 # ----------------------------
 # Detect category using Lambda
@@ -49,7 +49,33 @@ def fetch_prompt_template(category):
     if result["count"] == 0:
         return None
     return result["records"][0]["content"]
+# -----------------------------------------
+# NORMALIZE PROCESS DATA
+# -----------------------------------------
+def normalize_process_data(data: dict):
+    if not data:
+        return None
 
+    # Clean and strip string fields
+    for key in ["process_name", "description", "department", "owner", "frequency"]:
+        if key in data and isinstance(data[key], str):
+            data[key] = " ".join(data[key].split()).strip()
+
+    # Capitalize frequency
+    if "frequency" in data and isinstance(data["frequency"], str):
+        data["frequency"] = data["frequency"].capitalize()
+
+    # Convert triggers list → comma-separated string
+    triggers = data.get("triggers")
+    if isinstance(triggers, list):
+        data["triggers"] = ", ".join(str(t).strip() for t in triggers)
+
+    # Convert outcomes list → comma-separated string
+    outcomes = data.get("outcomes")
+    if isinstance(outcomes, list):
+        data["outcomes"] = ", ".join(str(o).strip() for o in outcomes)
+
+    return data
 
 # ----------------------------
 # Insert into DB using Lambda
@@ -119,7 +145,7 @@ Return ONLY valid JSON.
         # Step 6: Insert into DB via Lambda
         insert_into_table(data)
 
-        return "✅ Row inserted successfully via Lambda!"
+        return "✅ Process Created Successfully.."
 
     except json.JSONDecodeError:
         return "❌ AI returned invalid JSON."
