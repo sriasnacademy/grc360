@@ -3,7 +3,7 @@ from groq import Groq
 class LLMClient:
 
     def __init__(self):
-        self.client = Groq(api_key="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")
+        self.client = Groq(api_key="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")
 
     def generate(self, prompt):
 
