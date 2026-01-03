@@ -3,6 +3,14 @@ from agents.prompt_engineering.risk_pipeline import run_risk_pipeline
 from agents.prompt_engineering.control_pipeline import run_control_pipeline
 from agents.prompt_engineering.subprocess_pipeline import run_subporcess_pipeline
 from agents.prompt_engineering.test_plan_pipeline import run_test_plan_pipeline
+from agents.prompt_engineering.view_process_pipeline import run_view_process_pipeline
+from agents.prompt_engineering.view_risk_pipeline import run_view_risk_pipeline
+from agents.prompt_engineering.view_subprocess_pipeline import run_view_subprocess_pipeline
+from agents.prompt_engineering.view_control_pipeline import run_view_control_pipeline
+
+
+
+
 
 def route_pipeline(intent: str, raw_text: str):
     intent = intent.upper()
@@ -23,6 +31,17 @@ def route_pipeline(intent: str, raw_text: str):
     
     elif intent == "CREATE_TEST_PLAN":
         return run_test_plan_pipeline(intent, raw_text)
+
+    elif intent == "VIEW_PROCESS":
+        return run_view_process_pipeline(intent, raw_text)
+    elif intent in ("VIEW_RISK", "QUERY_RISK"):
+        return run_view_risk_pipeline(intent, raw_text)
+
+    elif intent in ("VIEW_SUBPROCESS", "QUERY_SUBPROCESS"):
+        return run_view_subprocess_pipeline(intent, raw_text)
+
+    elif intent in ("VIEW_CONTROL", "QUERY_CONTROL"):
+        return run_view_control_pipeline(intent, raw_text)
 
     else:
         return "⚠ Intent not supported"

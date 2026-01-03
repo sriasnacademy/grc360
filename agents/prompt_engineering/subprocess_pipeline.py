@@ -66,7 +66,7 @@ def normalize_subprocess_data(data: dict):
     data["status"] = data.get("status", "Active").capitalize()
 
     # Ensure FK is int
-    data["process_id"] = int(data.get("process_id", 1))
+    data["process_id"] = data.get("process_id", 1)
 
     return data
 
