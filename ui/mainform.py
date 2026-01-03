@@ -9,6 +9,7 @@ from ui.Create_Risk import risk
 from ui.Create_Control import create_control
 from ui.Create_subprocess import create_subporcess
 from agents.intent_agent import IntentAgent
+from ui.control_execution_gui import ControlExecutionGUI
 
 agent = IntentAgent()
 
@@ -283,6 +284,10 @@ def Create_Risk_Screen():
 def Create_SubProcess():
     create_subporcess(tk.Toplevel())
 
+def Test_Execution():
+    root = tk.Toplevel()
+    app = ControlExecutionGUI(root)
+
 # ------------------------------
 # MAIN FORM WITH MENU + WORKSPACE
 # ------------------------------
@@ -327,7 +332,8 @@ def start_main_form():
 
     # Audit menu
     aduit_menu = Menu(menubar, tearoff=0)
-    menubar.add_cascade(label="Audit", menu=aduit_menu)
+    aduit_menu.add_command(label="Test Execution", command=Test_Execution)
+    menubar.add_cascade(label="Test", menu=aduit_menu)
 
     # Control menu
     subprocess_menu = Menu(menubar, tearoff=0)
