@@ -4,7 +4,11 @@ from services.helper import build_lambda_payload_from_query
 class TestTaskService:
 
     def execute_tasks(self, test_step):
-
+        """
+        Execute all tasks for a test step and collect evidence.
+        Returns a list of dicts with keys:
+        test_task_id, task_name, status, records_count, reason, evidence
+        """
         payload = {
             "action": "select",
             "table": "test_tasks",
@@ -12,8 +16,6 @@ class TestTaskService:
                 "test_task_id",
                 "task_name",
                 "evidence_query",
-                "expected_condition",
-                "evaluation_rule",
                 "status"
             ],
             "where": {
@@ -29,45 +31,46 @@ class TestTaskService:
             results = []
 
             for r in records:
+                test_task_id = r.get("test_task_id")
                 task_name = r.get("task_name")
-                evaluation_rule = r.get("evaluation_rule")
                 evidence_query = r.get("evidence_query")
 
                 if not evidence_query:
                     results.append({
+                        "test_task_id": test_task_id,
                         "task_name": task_name,
-                        "value": None,
-                        "status": "FAIL",
-                        "reason": "Evidence query empty"
+                        "status": "EXECUTED",
+                        "records_count": 0,
+                        "reason": "No evidence query",
+                        "evidence": []
                     })
                     continue
 
-                # 🔹 Decode string → Lambda payload
+                # Build Lambda payload
                 try:
                     evidence_payload = build_lambda_payload_from_query(evidence_query)
                 except Exception as e:
                     results.append({
+                        "test_task_id": test_task_id,
                         "task_name": task_name,
-                        "value": None,
-                        "status": "FAIL",
-                        "reason": f"Query decode failed: {str(e)}"
+                        "status": "EXECUTED",
+                        "records_count": 0,
+                        "reason": f"Query decode failed: {e}",
+                        "evidence": []
                     })
                     continue
 
-                # 🔹 Execute evidence query
+                # Execute query
                 evidence_response = call_lambda(evidence_payload)
                 evidence_records = evidence_response.get("records", [])
 
-                value = list(evidence_records[0].values())[0] if evidence_records else 0
-
-                status = "PASS" if str(evaluation_rule) in str(value) else "FAIL"
-                reason = "Condition satisfied" if status == "PASS" else "Condition violated"
-
                 results.append({
+                    "test_task_id": test_task_id,
                     "task_name": task_name,
-                    "value": value,
-                    "status": status,
-                    "reason": reason
+                    "status": "EXECUTED",
+                    "records_count": len(evidence_records),
+                    "reason": "Evidence collected" if evidence_records else "No records returned",
+                    "evidence": evidence_records
                 })
 
             return results
