@@ -3,6 +3,7 @@ from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 import threading
 import time
+import json
 
 from runners.manual_runner import ManualRunner
 
@@ -12,7 +13,7 @@ class ControlExecutionGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("GRC Automated Control Execution")
-        self.root.geometry("700x500")
+        self.root.geometry("750x550")
 
         self.runner = ManualRunner()
         self.scheduler_thread = None
@@ -34,7 +35,6 @@ class ControlExecutionGUI:
         self.test_plan_entry.insert(0, "3")
         self.test_plan_entry.grid(row=0, column=1, padx=5)
 
-        # Execute Button
         tk.Button(
             root,
             text="▶ Execute Now",
@@ -71,10 +71,10 @@ class ControlExecutionGUI:
             command=self.stop_scheduler_job
         ).grid(row=1, column=1, pady=5)
 
-        # ---------------- RESULTS SECTION ----------------
+        # ---------------- RESULTS ----------------
         tk.Label(root, text="Execution Results", font=("Arial", 12, "bold")).pack(pady=5)
 
-        self.results_box = ScrolledText(root, height=15, width=85)
+        self.results_box = ScrolledText(root, height=18, width=90)
         self.results_box.pack(padx=10, pady=5)
 
     # ---------------- ACTIONS ----------------
@@ -132,23 +132,33 @@ class ControlExecutionGUI:
         self.stop_scheduler = True
         messagebox.showinfo("Scheduler Stopped", "Scheduler stopped")
 
-    # ---------------- RESULT DISPLAY ----------------
+    # ---------------- DISPLAY ----------------
 
-    def display_results(self, result):
-        self.results_box.insert(
-            tk.END,
-            f"Test Step: {result['step_name']}\n"
-            + "=" * 70 + "\n"
-        )
+    def display_results(self, results):
+        self.results_box.delete("1.0", tk.END)
 
-        for task in result["tasks"]:
-            status_icon = "✅" if task["status"] == "PASS" else "❌"
+        for step_result in results:
+            step_name = step_result["step_name"]
+            step_status = step_result["status"]
+            step_reason = step_result.get("reason", "No explanation from AI")
+            tasks = step_result.get("tasks", [])
 
             self.results_box.insert(
-                tk.END,
-                f"{status_icon} Task       : {task['task_name']}\n"
-                f"   Value      : {task['value']}\n"
-                f"   AI Result  : {task['status']}\n"
-                f"   Reason     : {task['reason']}\n"
-                + "-" * 70 + "\n"
+        tk.END,
+        f"Test Step: {step_name} (Step Status: {step_status})\n"
+        f"AI Reason: {step_reason}\n"
+        + "=" * 80 + "\n"
+            )
+
+            for task in results["tasks"]:
+                status_icon = "🟢" if task["status"] == "EXECUTED" else "⚠️"
+                evidence_text = "\n".join([str(r) for r in task.get("evidence", [])]) or "No records returned"
+    
+            self.results_box.insert(
+        tk.END,
+        f"{status_icon} Task       : {task['task_name']}\n"
+        f"   Status     : {task['status']}\n"
+        f"   Reason     : {task.get('reason', 'No reason')}\n"
+        f"   Evidence   :\n{evidence_text}\n"
+        + "-" * 80 + "\n"
             )
