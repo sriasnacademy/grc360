@@ -5,6 +5,9 @@ import boto3
 from botocore.exceptions import NoCredentialsError, ClientError
 
 
+AWS_ACCESS_KEY_ID = "AKIA2OAJTQGXVYLRTKTB"
+AWS_SECRET_ACCESS_KEY = "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"
+
 class PGVectorDB:
     def __init__(self, function_name, region="ap-south-1"):
         self.function_name = function_name
@@ -12,7 +15,9 @@ class PGVectorDB:
         try:
             self.lambda_client = boto3.client(
                 "lambda",
-                region_name=region
+                region_name=region,
+                aws_access_key_id=AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=AWS_SECRET_ACCESS_KEY
             )
         except Exception as e:
             raise RuntimeError(f"Failed to create Lambda client: {e}")
