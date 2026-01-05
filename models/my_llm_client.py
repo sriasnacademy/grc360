@@ -1,9 +1,10 @@
 from groq import Groq
+from config.servicekeys import GROQ_API_KEY
 
 class LLMClient:
 
     def __init__(self):
-        self.client = Groq(api_key="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")
+        self.client = Groq(api_key=GROQ_API_KEY)
 
     def generate(self, prompt):
 
