@@ -1,11 +1,13 @@
 from groq import Groq
 from connectors.lambda_mysql import call_lambda
 import json
+from services.rag_service import save_process_to_rag
+from config.servicekeys import GROQ_API_KEY
 
 # ----------------------------
 # Groq AI Client
 # ----------------------------
-client = Groq(api_key="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")
+client = Groq(api_key=GROQ_API_KEY)
 
 # ----------------------------
 # Detect category using Lambda
@@ -144,6 +146,8 @@ Return ONLY valid JSON.
 
         # Step 6: Insert into DB via Lambda
         insert_into_table(data)
+
+        save_process_to_rag(data)
 
         return "✅ Process Created Successfully.."
 
