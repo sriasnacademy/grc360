@@ -7,9 +7,11 @@ from agents.prompt_engineering.view_process_pipeline import run_view_process_pip
 from agents.prompt_engineering.view_risk_pipeline import run_view_risk_pipeline
 from agents.prompt_engineering.view_subprocess_pipeline import run_view_subprocess_pipeline
 from agents.prompt_engineering.view_control_pipeline import run_view_control_pipeline
-
-
-
+from agents.prompt_engineering.linking.entity_linker import (
+    link_risk_control,
+    link_process_risk,
+    link_process_subprocess
+)
 
 
 def route_pipeline(intent: str, raw_text: str):
@@ -43,5 +45,13 @@ def route_pipeline(intent: str, raw_text: str):
     elif intent in ("VIEW_CONTROL", "QUERY_CONTROL"):
         return run_view_control_pipeline(intent, raw_text)
 
+    elif intent == "LINK_RISK_CONTROL":
+       return link_risk_control(raw_text)
+
+    elif intent == "LINK_PROCESS_RISK":
+        return link_process_risk(raw_text)
+
+    elif intent == "LINK_PROCESS_SUBPROCESS":
+        return link_process_subprocess(raw_text)
     else:
         return "⚠ Intent not supported"
