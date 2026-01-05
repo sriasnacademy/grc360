@@ -10,6 +10,7 @@ from ui.Create_Control import create_control
 from ui.Create_subprocess import create_subporcess
 from agents.intent_agent import IntentAgent
 from ui.control_execution_gui import ControlExecutionGUI
+from ui.control_report_gui import ControlReportGUI
 
 agent = IntentAgent()
 
@@ -286,7 +287,9 @@ def Create_SubProcess():
 
 def Test_Execution():
     root = tk.Toplevel()
-    app = ControlExecutionGUI(root)
+    app = ControlReportGUI(root)
+#    root = tk.Toplevel()
+#   app = ControlExecutionGUI(root)
 
 # ------------------------------
 # MAIN FORM WITH MENU + WORKSPACE

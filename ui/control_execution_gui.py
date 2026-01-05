@@ -135,30 +135,30 @@ class ControlExecutionGUI:
     # ---------------- DISPLAY ----------------
 
     def display_results(self, results):
-        self.results_box.delete("1.0", tk.END)
+        """
+        results = list of test steps
+        """
 
-        for step_result in results:
-            step_name = step_result["step_name"]
-            step_status = step_result["status"]
-            step_reason = step_result.get("reason", "No explanation from AI")
-            tasks = step_result.get("tasks", [])
-
+        for step in results:
             self.results_box.insert(
-        tk.END,
-        f"Test Step: {step_name} (Step Status: {step_status})\n"
-        f"AI Reason: {step_reason}\n"
-        + "=" * 80 + "\n"
+            tk.END,
+            f"Test Step: {step['step_name']} (Step Status: {step['status']})\n"
+            f"AI Reason: {step['reason']}\n"
+            + "=" * 80 + "\n"
             )
 
-            for task in results["tasks"]:
-                status_icon = "🟢" if task["status"] == "EXECUTED" else "⚠️"
-                evidence_text = "\n".join([str(r) for r in task.get("evidence", [])]) or "No records returned"
-    
+        for task in step.get("tasks", []):
+            evidence = task.get("evidence", [])
+            evidence_text = (
+                "\n".join([str(r) for r in evidence])
+                if evidence else "No records returned"
+            )
+
             self.results_box.insert(
-        tk.END,
-        f"{status_icon} Task       : {task['task_name']}\n"
-        f"   Status     : {task['status']}\n"
-        f"   Reason     : {task.get('reason', 'No reason')}\n"
-        f"   Evidence   :\n{evidence_text}\n"
-        + "-" * 80 + "\n"
+                tk.END,
+                f"🟢 Task       : {task['task_name']}\n"
+                f"   Status     : {task['status']}\n"
+                f"   Reason     : {task['reason']}\n"
+                f"   Evidence   :\n{evidence_text}\n"
+                + "-" * 80 + "\n"
             )
