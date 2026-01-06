@@ -1,11 +1,6 @@
-from groq import Groq
-from config.servicekeys import GROQ_API_KEY
+from services.embedding_manager import EmbeddingManager
 
-client = Groq(api_key=GROQ_API_KEY)
+_embedding_manager = EmbeddingManager()
 
-def generate_embedding(text: str) -> list:
-    response = client.embeddings.create(
-        model="llama-3.3-70b-versatile",
-        input=text
-    )
-    return response.data[0].embedding
+def get_embedding(text: str) -> list[float]:
+    return _embedding_manager.generate_embedding(text)
