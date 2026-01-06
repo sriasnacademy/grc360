@@ -145,7 +145,7 @@ Return ONLY valid JSON.
         data = json.loads(clean)
 
         # Step 6: Insert into DB via Lambda
-        insert_into_table(data)
+        #insert_into_table(data)
 
         save_process_to_rag(data)
 
