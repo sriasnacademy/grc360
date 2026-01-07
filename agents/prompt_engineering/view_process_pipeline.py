@@ -1,64 +1,62 @@
 from connectors.lambda_mysql import call_lambda
+from services.rag_retrieval_service import rag_find_process_ids
 
+def get_best_process_id_from_rag(rag_results, min_similarity=0.7):
+    if not rag_results:
+        return None
+
+    best_match = rag_results[0]   # already sorted by similarity
+
+    similarity = best_match[4]
+    if similarity < min_similarity:
+        return None  # low confidence match
+
+    process_id = int(best_match[2])  # entity_id → process_id
+    return process_id
 
 def run_view_process_pipeline(intent: str, raw_text: str):
-    """
-    Handles:
-    - show processes
-    - view all processes
-    - view process <process name>
-    """
-
     try:
-        process_name = extract_process_name(raw_text)
+        # Step 1️⃣ Search in RAG
+        rag_results = rag_find_process_ids(raw_text)
 
+        if not rag_results:
+            return "❌ No matching process found."
+
+        # rag_results is a LIST
+        
+        rag_results_dict = [
+        {
+            "id": r[0],
+            "entity_type": r[1],
+            "process_id": r[2],
+            "content": r[3],
+            "similarity": r[4]
+        }
+        for r in rag_results
+        ]
+        
+        #process_ids = [r["process_id"] for r in rag_results_dict]
+        
+        correct_process_id = get_best_process_id_from_rag(rag_results)
+        
+        # Step 2️⃣ Fetch from MySQL
         payload = {
             "action": "select",
-            "table": "processes"
+            "table": "processes",
+            "where": {
+                "process_id": correct_process_id
+            }
         }
 
-        # ✅ If user asked for a specific process
-        if process_name:
-            payload["where"] = {
-                "process_name": process_name
-            }
-
-        data = call_lambda(payload)
-        records = data.get("records", [])
+        records = call_lambda(payload)  # ← LIST
 
         if not records:
-            return "No matching process found."
+            return "❌ Process found in RAG but missing in database."
 
         return format_process_response(records)
 
     except Exception as e:
         return f"❌ Error fetching process data: {e}"
-
-
-# -------------------------------------------------
-# Extract process name from user input
-# -------------------------------------------------
-def extract_process_name(text: str):
-    """
-    Examples:
-    - view process Employee Onboarding
-    - show process Vendor Management
-    """
-
-    text = text.lower().strip()
-
-    keywords = [
-        "view process",
-        "show process",
-        "display process"
-    ]
-
-    for key in keywords:
-        if key in text:
-            name = text.split(key)[-1].strip()
-            return name.title() if name else None
-
-    return None
 
 
 # -------------------------------------------------

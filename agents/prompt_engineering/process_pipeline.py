@@ -96,8 +96,14 @@ def insert_into_table(data):
             "outcomes": ",".join(data.get("outcomes", []))
         }
     }
-    call_lambda(payload)
-    return True
+
+    result = call_lambda(payload)
+
+    process_id = result.get("inserted_id")
+    if not process_id:
+        raise RuntimeError("MySQL insert failed – no process_id returned")
+
+    return process_id
 
 
 # ----------------------------
@@ -145,9 +151,10 @@ Return ONLY valid JSON.
         data = json.loads(clean)
 
         # Step 6: Insert into DB via Lambda
-        #insert_into_table(data)
+        process_id = insert_into_table(data)
 
-        save_process_to_rag(data)
+        #Step 7: Insert into PGVector via Lambda
+        save_process_to_rag(data,process_id)
 
         return "✅ Process Created Successfully.."
 
