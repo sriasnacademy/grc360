@@ -1,54 +1,67 @@
 from connectors.lambda_mysql import call_lambda
 from services.rag_retrieval_service import rag_find_process_ids
 
-def get_best_process_id_from_rag(rag_results, min_similarity=0.7):
+def extract_process_ids_from_rag(rag_results, min_similarity=0.5):
+    """
+    Returns process_ids sorted by similarity (high → low)
+    """
     if not rag_results:
-        return None
+        return []
 
-    best_match = rag_results[0]   # already sorted by similarity
+    filtered = []
+    for r in rag_results:
+        similarity = r[4]
+        if similarity >= min_similarity:
+            try:
+                filtered.append((int(r[2]), similarity))
+            except ValueError:
+                continue
 
-    similarity = best_match[4]
-    if similarity < min_similarity:
-        return None  # low confidence match
+    # sort by similarity desc
+    filtered.sort(key=lambda x: x[1], reverse=True)
 
-    process_id = int(best_match[2])  # entity_id → process_id
-    return process_id
+    return [pid for pid, _ in filtered]
 
 def run_view_process_pipeline(intent: str, raw_text: str):
     try:
-        # Step 1️⃣ Search in RAG
+        # Step 1️⃣ Semantic search (RAG)
         rag_results = rag_find_process_ids(raw_text)
 
-        if not rag_results:
-            return "❌ No matching process found."
+        # Step 2️⃣ Extract process IDs based on similarity
+        process_ids = extract_process_ids_from_rag(
+            rag_results,
+            min_similarity=0.5
+        )
 
-        # rag_results is a LIST
-        
-        rag_results_dict = [
-        {
-            "id": r[0],
-            "entity_type": r[1],
-            "process_id": r[2],
-            "content": r[3],
-            "similarity": r[4]
-        }
-        for r in rag_results
-        ]
-        
-        #process_ids = [r["process_id"] for r in rag_results_dict]
-        
-        correct_process_id = get_best_process_id_from_rag(rag_results)
-        
-        # Step 2️⃣ Fetch from MySQL
+        # ----------------------------
+        # CASE A️⃣: No strong semantic intent → VIEW ALL
+        # ----------------------------
+        if not process_ids:
+            payload = {
+                "action": "select",
+                "table": "processes"
+            }
+            result = call_lambda(payload)
+            records = result.get("records", [])
+
+            if not records:
+                return "❌ No processes found."
+
+            return format_process_response(records)
+
+        # ----------------------------
+        # CASE B️⃣: One or more related processes
+        # ----------------------------
         payload = {
             "action": "select",
             "table": "processes",
             "where": {
-                "process_id": correct_process_id
+                "process_id": process_ids
             }
         }
 
-        records = call_lambda(payload)  # ← LIST
+        result = call_lambda(payload)
+        records = result.get("records", [])
 
         if not records:
             return "❌ Process found in RAG but missing in database."
@@ -57,6 +70,7 @@ def run_view_process_pipeline(intent: str, raw_text: str):
 
     except Exception as e:
         return f"❌ Error fetching process data: {e}"
+
 
 
 # -------------------------------------------------
