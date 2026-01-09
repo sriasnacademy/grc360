@@ -1,6 +1,7 @@
 import json
 from groq import Groq
 from connectors.lambda_mysql import call_lambda
+from services.rag_service import save_process_to_rag
 
 client = Groq(api_key="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")
 
@@ -45,8 +46,9 @@ def insert_control(data):
             "control_category": data.get("control_category", "")
         }
     }
-    call_lambda(payload)
-    
+    control_id = call_lambda(payload)
+    return control_id
+
 def safe_json_parse(text: str):
     if not text or not text.strip():
         return None
@@ -102,7 +104,11 @@ No explanation.
         if not cleaned_data:
             return "❌ Control data normalization failed"
 
-        insert_control(cleaned_data)
+        cid = insert_control(cleaned_data)
+        
+        #RAG INSERTION
+        save_process_to_rag("CONTROL",cleaned_data,cid)
+
 
         return "✅ Control inserted successfully"
 

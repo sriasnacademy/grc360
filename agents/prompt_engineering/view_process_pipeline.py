@@ -25,7 +25,7 @@ def extract_process_ids_from_rag(rag_results, min_similarity=0.5):
 def run_view_process_pipeline(intent: str, raw_text: str):
     try:
         # Step 1️⃣ Semantic search (RAG)
-        rag_results = rag_find_process_ids(raw_text)
+        rag_results = rag_find_process_ids(raw_text,"PROCESS")
 
         # Step 2️⃣ Extract process IDs based on similarity
         process_ids = extract_process_ids_from_rag(

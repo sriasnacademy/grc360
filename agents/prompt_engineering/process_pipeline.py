@@ -154,7 +154,7 @@ Return ONLY valid JSON.
         process_id = insert_into_table(data)
 
         #Step 7: Insert into PGVector via Lambda
-        save_process_to_rag(data,process_id)
+        save_process_to_rag("PROCESS",data,process_id)
 
         return "✅ Process Created Successfully.."
 

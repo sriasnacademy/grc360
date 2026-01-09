@@ -2,11 +2,13 @@ import json
 import re
 from groq import Groq
 from connectors.lambda_mysql import call_lambda
+from services.rag_service import save_process_to_rag
+from config.servicekeys import GROQ_API_KEY
 
 # -----------------------------------------
 # GROQ CLIENT
 # -----------------------------------------
-client = Groq(api_key="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")
+client = Groq(api_key=GROQ_API_KEY)
 
 # -----------------------------------------
 # FETCH SUBPROCESS PROMPT TEMPLATE
@@ -83,7 +85,11 @@ def insert_risk(data):
         }
     }
 
-    call_lambda(payload)
+    result = call_lambda(payload)
+
+    risk_id = result.get("inserted_id")
+    
+    return risk_id
 
 # -----------------------------------------
 # MAIN SUBPROCESS PIPELINE
@@ -124,7 +130,10 @@ def run_risk_pipeline(intent, raw_text):
         if not cleaned_data:
             return "❌ RISK data normalization failed"
 
-        insert_risk(cleaned_data)
+        riskid = insert_risk(cleaned_data)
+        
+        #RAG INSERTION
+        save_process_to_rag("RISK",cleaned_data,riskid)
 
         return "✅ RISK inserted successfully"
 

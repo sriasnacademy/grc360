@@ -34,8 +34,9 @@ def route_pipeline(intent: str, raw_text: str):
     elif intent == "CREATE_TEST_PLAN":
         return run_test_plan_pipeline(intent, raw_text)
 
-    elif intent == "VIEW_PROCESS":
+    elif intent in ["VIEW_PROCESS", "QUERY_PROCESS"]:
         return run_view_process_pipeline(intent, raw_text)
+    
     elif intent in ("VIEW_RISK", "QUERY_RISK"):
         return run_view_risk_pipeline(intent, raw_text)
 
