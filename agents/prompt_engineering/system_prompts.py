@@ -3,10 +3,12 @@ from agents.prompt_engineering.risk_pipeline import run_risk_pipeline
 from agents.prompt_engineering.control_pipeline import run_control_pipeline
 from agents.prompt_engineering.subprocess_pipeline import run_subporcess_pipeline
 from agents.prompt_engineering.test_plan_pipeline import run_test_plan_pipeline
+
 from agents.prompt_engineering.view_process_pipeline import run_view_process_pipeline
 from agents.prompt_engineering.view_risk_pipeline import run_view_risk_pipeline
 from agents.prompt_engineering.view_subprocess_pipeline import run_view_subprocess_pipeline
 from agents.prompt_engineering.view_control_pipeline import run_view_control_pipeline
+
 from agents.prompt_engineering.linking.entity_linker import (
     link_risk_control,
     link_process_risk,
@@ -16,27 +18,63 @@ from agents.prompt_engineering.linking.entity_linker import (
 
 def route_pipeline(intent: str, raw_text: str):
     intent = intent.upper()
-    
-    print("INTENT in prompt file: ",intent)
-    
-    if intent == "CREATE_PROCESS":
+    text = raw_text.lower()
+
+    print("INTENT detected:", intent)
+    print("RAW TEXT:", raw_text)
+
+    # ======================================================
+    # 🔗 LINKING INTENTS (HIGHEST PRIORITY)
+    # ======================================================
+    # Safety net: even if intent is wrong, text-based override
+    if ("link" in text or "map" in text or "assign" in text or "associate" in text):
+        
+        if "risk" in text and "control" in text:
+            print("🔁 Forced routing: LINK_RISK_CONTROL")
+            return link_risk_control(raw_text)
+
+        if "process" in text and "risk" in text:
+            print("🔁 Forced routing: LINK_PROCESS_RISK")
+            return link_process_risk(raw_text)
+
+        if "process" in text and "sub" in text:
+            print("🔁 Forced routing: LINK_PROCESS_SUBPROCESS")
+            return link_process_subprocess(raw_text)
+
+    # Intent-based linking (normal flow)
+    if intent == "LINK_RISK_CONTROL":
+        return link_risk_control(raw_text)
+
+    elif intent == "LINK_PROCESS_RISK":
+        return link_process_risk(raw_text)
+
+    elif intent == "LINK_PROCESS_SUBPROCESS":
+        return link_process_subprocess(raw_text)
+
+    # ======================================================
+    # ➕ CREATE INTENTS
+    # ======================================================
+    elif intent == "CREATE_PROCESS":
         return run_process_pipeline(intent, raw_text)
 
     elif intent == "CREATE_RISK":
         return run_risk_pipeline(intent, raw_text)
-    
+
     elif intent == "CREATE_CONTROL":
         return run_control_pipeline(intent, raw_text)
-    
+
     elif intent == "CREATE_SUBPROCESS":
         return run_subporcess_pipeline(intent, raw_text)
-    
+
     elif intent == "CREATE_TEST_PLAN":
         return run_test_plan_pipeline(intent, raw_text)
 
-    elif intent in ["VIEW_PROCESS", "QUERY_PROCESS"]:
+    # ======================================================
+    # 👀 VIEW / QUERY INTENTS
+    # ======================================================
+    elif intent in ("VIEW_PROCESS", "QUERY_PROCESS"):
         return run_view_process_pipeline(intent, raw_text)
-    
+
     elif intent in ("VIEW_RISK", "QUERY_RISK"):
         return run_view_risk_pipeline(intent, raw_text)
 
@@ -46,13 +84,8 @@ def route_pipeline(intent: str, raw_text: str):
     elif intent in ("VIEW_CONTROL", "QUERY_CONTROL"):
         return run_view_control_pipeline(intent, raw_text)
 
-    elif intent == "LINK_RISK_CONTROL":
-       return link_risk_control(raw_text)
-
-    elif intent == "LINK_PROCESS_RISK":
-        return link_process_risk(raw_text)
-
-    elif intent == "LINK_PROCESS_SUBPROCESS":
-        return link_process_subprocess(raw_text)
+    # ======================================================
+    # ❌ FALLBACK
+    # ======================================================
     else:
         return "⚠ Intent not supported"

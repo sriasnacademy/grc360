@@ -6,7 +6,7 @@ from connectors.lambda_mysql import call_lambda
 # -----------------------------------------
 # GROQ CLIENT
 # -----------------------------------------
-client = Groq(api_key="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")
+client = Groq(api_key="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")
 
 
 # -----------------------------------------

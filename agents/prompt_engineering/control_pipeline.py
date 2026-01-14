@@ -3,7 +3,7 @@ from groq import Groq
 from connectors.lambda_mysql import call_lambda
 from services.rag_service import save_process_to_rag
 
-client = Groq(api_key="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")
+client = Groq(api_key="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")
 
 
 def fetch_control_template(intent):
@@ -88,7 +88,7 @@ No explanation.
 """
 
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
