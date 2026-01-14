@@ -1,177 +1,213 @@
 from connectors.lambda_mysql import call_lambda
-from agents.prompt_engineering.common_name_extractor import extract_names
+from models.my_llm_client import LLMClient
 
 
 # ------------------------------------------------
-# Process ↔ Subprocess
+# Initialize shared LLM client
+# ------------------------------------------------
+llm = LLMClient()
+
+
+# ------------------------------------------------
+# LLM helper: pick correct entity ID
+# ------------------------------------------------
+def llm_pick_id(entity_type: str, user_prompt: str, records: list, id_key: str, name_key: str):
+    """
+    Uses Groq LLM (via LLMClient) to choose the best matching entity ID
+    """
+
+    if not records:
+        return None
+
+    options = "\n".join(
+        [f"{r[id_key]} | {r[name_key]}" for r in records]
+    )
+
+    llm_prompt = f"""
+You are an enterprise GRC assistant.
+
+User request:
+"{user_prompt}"
+
+Available {entity_type}s:
+{options}
+
+Rules:
+- Pick the SINGLE best matching {entity_type}
+- Reply ONLY with the ID
+- If nothing matches, reply NONE
+"""
+
+    answer = llm.generate(llm_prompt).strip()
+
+    if not answer or answer.upper() == "NONE":
+        return None
+
+    try:
+        return int(answer)
+    except ValueError:
+        return None
+
+
+# ------------------------------------------------
+# Process ↔ Sub-process (LLM powered)
 # ------------------------------------------------
 def link_process_subprocess(prompt: str):
-    names = extract_names(prompt)
 
-    process_name = names.get("process")
-    subprocess_name = names.get("sub_process")
-
-    if not process_name or not subprocess_name:
-        return "❌ Process or Sub-process not found in prompt"
-
-    payload = {
+    process_result = call_lambda({
         "action": "select",
-        "query": "SELECT process_id FROM processes WHERE process_name = %s",
-        "params": [process_name]
-    }
-    result = call_lambda(payload)
+        "table": "processes"
+    })
 
-    if not result:
-        return "❌ Process not found in DB"
+    subprocess_result = call_lambda({
+        "action": "select",
+        "table": "sub_processes"
+    })
 
-    process_id = result[0]["process_id"]
+    processes = process_result.get("records", [])
+    subprocesses = subprocess_result.get("records", [])
 
-    payload = {
+    process_id = llm_pick_id(
+        "process",
+        prompt,
+        processes,
+        "process_id",
+        "process_name"
+    )
+
+    sub_process_id = llm_pick_id(
+        "sub process",
+        prompt,
+        subprocesses,
+        "sub_process_id",
+        "sub_process_name"
+    )
+
+    if not process_id or not sub_process_id:
+        return "❌ Unable to resolve Process or Sub-process using LLM"
+
+    call_lambda({
         "action": "update",
+        "table": "sub_processes",   # ✅ REQUIRED
         "query": """
             UPDATE sub_processes
             SET process_id = %s
-            WHERE sub_process_name = %s
+            WHERE sub_process_id = %s
         """,
-        "params": [process_id, subprocess_name]
-    }
-    call_lambda(payload)
+        "params": [process_id, sub_process_id]
+    })
 
-    return "✅ Sub-process linked to process"
+    return "✅ Sub-process linked to Process using Groq LLM"
 
 
 # ------------------------------------------------
-# Process / Subprocess ↔ Risk
+# Process / Sub-process ↔ Risk (LLM powered)
 # ------------------------------------------------
 def link_process_risk(prompt: str):
-    names = extract_names(prompt)
 
-    process_name = names.get("process")
-    subprocess_name = names.get("sub_process")
-    risk_name = names.get("risk")
-
-    if not process_name or not risk_name:
-        return "❌ Process or Risk not found in prompt"
-
-    payload = {
+    process_result = call_lambda({
         "action": "select",
-        "query": "SELECT process_id FROM processes WHERE process_name = %s",
-        "params": [process_name]
-    }
-    result = call_lambda(payload)
+        "table": "processes"
+    })
 
-    if not result:
-        return "❌ Process not found"
-
-    process_id = result[0]["process_id"]
-
-    sub_process_id = None
-    if subprocess_name:
-        payload = {
-            "action": "select",
-            "query": "SELECT sub_process_id FROM sub_processes WHERE sub_process_name = %s",
-            "params": [subprocess_name]
-        }
-        sub_result = call_lambda(payload)
-        if sub_result:
-            sub_process_id = sub_result[0]["sub_process_id"]
-
-    payload = {
+    subprocess_result = call_lambda({
         "action": "select",
-        "query": "SELECT risk_id FROM risks WHERE risk_name = %s",
-        "params": [risk_name]
-    }
-    risk_result = call_lambda(payload)
+        "table": "sub_processes"
+    })
 
-    if not risk_result:
-        return "❌ Risk not found"
+    risk_result = call_lambda({
+        "action": "select",
+        "table": "risk"
+    })
 
-    risk_id = risk_result[0]["risk_id"]
+    processes = process_result.get("records", [])
+    subprocesses = subprocess_result.get("records", [])
+    risks = risk_result.get("records", [])
 
-    payload = {
+    process_id = llm_pick_id(
+        "process",
+        prompt,
+        processes,
+        "process_id",
+        "process_name"
+    )
+
+    sub_process_id = llm_pick_id(
+        "sub process",
+        prompt,
+        subprocesses,
+        "sub_process_id",
+        "sub_process_name"
+    )
+
+    risk_id = llm_pick_id(
+        "risk",
+        prompt,
+        risks,
+        "risk_id",
+        "risk_name"
+    )
+
+    if not process_id or not risk_id:
+        return "❌ Unable to resolve Process or Risk using LLM"
+
+    call_lambda({
         "action": "insert",
+        "table": "process_risk_map",   # ✅ REQUIRED
         "query": """
             INSERT INTO process_risk_map (process_id, sub_process_id, risk_id)
             VALUES (%s, %s, %s)
         """,
         "params": [process_id, sub_process_id, risk_id]
-    }
-    call_lambda(payload)
+    })
 
-    return "✅ Risk linked to process"
+    return "✅ Risk linked to Process/Sub-process using Groq LLM"
 
 
 # ------------------------------------------------
-# Risk ↔ Control
+# Risk ↔ Control (LLM powered)
 # ------------------------------------------------
 def link_risk_control(prompt: str):
-    """
-    Links a risk to a control based on names extracted from the prompt.
-    Robust against case differences, extra spaces, and partial matches.
-    """
 
-    names = extract_names(prompt)
-    risk_name = names.get("risk")
-    control_name = names.get("control")
+    risk_result = call_lambda({
+        "action": "select",
+        "table": "risk"
+    })
 
-    if not risk_name or not control_name:
-        return "❌ Risk or Control name not found in prompt"
+    control_result = call_lambda({
+        "action": "select",
+        "table": "control"
+    })
 
-    # --- 1. Fetch all risks ---
-    payload = {"action": "select", "table": "risk"}
-    risk_result = call_lambda(payload)
-    risk_id = None
+    risks = risk_result.get("records", [])
+    controls = control_result.get("records", [])
 
-    # First try exact match
-    for r in risk_result.get("records", []):
-        if r["risk_name"].strip().lower() == risk_name.strip().lower():
-            risk_id = r["risk_id"]
-            break
+    risk_id = llm_pick_id(
+        "risk",
+        prompt,
+        risks,
+        "risk_id",
+        "risk_name"
+    )
 
-    # If not found, try partial match (LIKE)
-    if not risk_id:
-        for r in risk_result.get("records", []):
-            if risk_name.strip().lower() in r["risk_name"].strip().lower():
-                risk_id = r["risk_id"]
-                break
+    control_id = llm_pick_id(
+        "control",
+        prompt,
+        controls,
+        "control_id",
+        "control_name"
+    )
 
-    if not risk_id:
-        print("DB risks:", [repr(r["risk_name"]) for r in risk_result.get("records", [])])
-        print("Prompt risk:", repr(risk_name))
-        return "❌ Risk not found in DB"
+    if not risk_id or not control_id:
+        return "❌ Unable to resolve Risk or Control using LLM"
 
-    # --- 2. Fetch all controls ---
-    payload = {"action": "select", "table": "control"}
-    control_result = call_lambda(payload)
-    control_id = None
-
-    # Exact match
-    for c in control_result.get("records", []):
-        if c["control_name"].strip().lower() == control_name.strip().lower():
-            control_id = c["control_id"]
-            break
-
-    # Partial match fallback
-    if not control_id:
-        for c in control_result.get("records", []):
-            if control_name.strip().lower() in c["control_name"].strip().lower():
-                control_id = c["control_id"]
-                break
-
-    if not control_id:
-        print("DB controls:", [repr(c["control_name"]) for c in control_result.get("records", [])])
-        print("Prompt control:", repr(control_name))
-        return "❌ Control not found in DB"
-
-    # --- 3. Insert mapping ---
-    payload = {
+    call_lambda({
         "action": "insert",
         "table": "risk_control_map",
         "data": {
             "risk_id": risk_id,
             "control_id": control_id
         }
-    }
-    call_lambda(payload)
+    })
 
-    return "✅ Control linked to risk successfully"
+    return "✅ Risk linked to Control using Groq LLM"
