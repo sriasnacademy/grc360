@@ -87,14 +87,12 @@ def link_process_subprocess(prompt: str):
         return "❌ Unable to resolve Process or Sub-process using LLM"
 
     call_lambda({
-        "action": "update",
-        "table": "sub_processes",   # ✅ REQUIRED
-        "query": """
-            UPDATE sub_processes
-            SET process_id = %s
-            WHERE sub_process_id = %s
-        """,
-        "params": [process_id, sub_process_id]
+        "action": "insert",
+        "table": "process_subprocess_map",
+        "data": {
+            "process_id": process_id,
+            "sub_process_id": sub_process_id
+        }
     })
 
     return "✅ Sub-process linked to Process using Groq LLM"
@@ -105,6 +103,7 @@ def link_process_subprocess(prompt: str):
 # ------------------------------------------------
 def link_process_risk(prompt: str):
 
+    # Fetch master data
     process_result = call_lambda({
         "action": "select",
         "table": "processes"
@@ -124,6 +123,7 @@ def link_process_risk(prompt: str):
     subprocesses = subprocess_result.get("records", [])
     risks = risk_result.get("records", [])
 
+    # Try resolving both
     process_id = llm_pick_id(
         "process",
         prompt,
@@ -148,20 +148,32 @@ def link_process_risk(prompt: str):
         "risk_name"
     )
 
-    if not process_id or not risk_id:
-        return "❌ Unable to resolve Process or Risk using LLM"
+    if not risk_id:
+        return "❌ Unable to resolve Risk using LLM"
 
+    # Decide entity (IMPORTANT LOGIC)
+    if sub_process_id:
+        pro_subpro_id = sub_process_id
+        pro_subpro_type = "SUB_PROCESS"
+    elif process_id:
+        pro_subpro_id = process_id
+        pro_subpro_type = "PROCESS"
+    else:
+        return "❌ Unable to resolve Process or Sub-process using LLM"
+
+    # Insert mapping (NEW STRUCTURE)
     call_lambda({
         "action": "insert",
-        "table": "process_risk_map",   # ✅ REQUIRED
-        "query": """
-            INSERT INTO process_risk_map (process_id, sub_process_id, risk_id)
-            VALUES (%s, %s, %s)
-        """,
-        "params": [process_id, sub_process_id, risk_id]
+        "table": "process_subprocess_risk_map",
+        "data": {
+            "pro_subpro_id": pro_subpro_id,
+            "pro_subpro_type": pro_subpro_type,
+            "risk_id": risk_id
+        }
     })
 
-    return "✅ Risk linked to Process/Sub-process using Groq LLM"
+    return f"✅ Risk linked to {pro_subpro_type.replace('_', ' ').title()} using Groq LLM"
+
 
 
 # ------------------------------------------------
