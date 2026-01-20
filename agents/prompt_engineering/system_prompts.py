@@ -23,23 +23,38 @@ def route_pipeline(intent: str, raw_text: str):
     print("INTENT detected:", intent)
     print("RAW TEXT:", raw_text)
 
-    # ======================================================
-    # 🔗 LINKING INTENTS (HIGHEST PRIORITY)
-    # ======================================================
-    # Safety net: even if intent is wrong, text-based override
-    if ("link" in text or "map" in text or "assign" in text or "associate" in text):
-        
+# ======================================================
+# 🔗 LINKING INTENTS (HIGHEST PRIORITY)
+# ======================================================
+
+    LINK_KEYWORDS = [
+        "link", "map", "assign", "associate",
+        "add", "include", "part of", "under", "connect", "belongs to"
+    ]
+
+    if any(keyword in text for keyword in LINK_KEYWORDS):
+
+        # Risk ↔ Control
         if "risk" in text and "control" in text:
             print("🔁 Forced routing: LINK_RISK_CONTROL")
             return link_risk_control(raw_text)
 
+        # Process ↔ Risk
         if "process" in text and "risk" in text:
             print("🔁 Forced routing: LINK_PROCESS_RISK")
             return link_process_risk(raw_text)
 
-        if "process" in text and "sub" in text:
+        # ⭐ Process ↔ Sub-process (MAIN FIX)
+        if (
+            "sub process" in text
+            or "subprocess" in text
+            or "under" in text
+            or "part of" in text
+            or "include" in text
+        ):
             print("🔁 Forced routing: LINK_PROCESS_SUBPROCESS")
             return link_process_subprocess(raw_text)
+
 
     # Intent-based linking (normal flow)
     if intent == "LINK_RISK_CONTROL":
