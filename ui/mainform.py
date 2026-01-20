@@ -11,6 +11,7 @@ from ui.Create_subprocess import create_subporcess
 from agents.intent_agent import IntentAgent
 from ui.control_execution_gui import ControlExecutionGUI
 from ui.control_report_gui import ControlReportGUI
+from services.bedrock_healthcheck import bedrock_healthcheck
 
 agent = IntentAgent()
 
@@ -314,6 +315,7 @@ def start_main_form():
 
     # Swetha menu
     swetha_menu = Menu(menubar, tearoff=0)
+    swetha_menu.add_command(label="Bedrock Health Check Screen", command=bedrock_healthcheck)
     menubar.add_cascade(label="Swetha", menu=swetha_menu)
 
     # Process menu
