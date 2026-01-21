@@ -8,11 +8,13 @@ from agents.prompt_engineering.view_process_pipeline import run_view_process_pip
 from agents.prompt_engineering.view_risk_pipeline import run_view_risk_pipeline
 from agents.prompt_engineering.view_subprocess_pipeline import run_view_subprocess_pipeline
 from agents.prompt_engineering.view_control_pipeline import run_view_control_pipeline
+from agents.prompt_engineering.view_test_plan_pipeline import run_view_test_plan_pipeline
 
 from agents.prompt_engineering.linking.entity_linker import (
     link_risk_control,
     link_process_risk,
-    link_process_subprocess
+    link_process_subprocess,
+    link_test_plan_control
 )
 
 
@@ -23,16 +25,20 @@ def route_pipeline(intent: str, raw_text: str):
     print("INTENT detected:", intent)
     print("RAW TEXT:", raw_text)
 
-# ======================================================
-# 🔗 LINKING INTENTS (HIGHEST PRIORITY)
-# ======================================================
-
     LINK_KEYWORDS = [
         "link", "map", "assign", "associate",
         "add", "include", "part of", "under", "connect", "belongs to"
     ]
 
+    # ======================================================
+    # 🔗 FORCED LINK ROUTING (HIGHEST PRIORITY)
+    # ======================================================
     if any(keyword in text for keyword in LINK_KEYWORDS):
+
+        # ⭐⭐⭐ TEST PLAN ↔ CONTROL (MOST SPECIFIC – CHECK FIRST)
+        if "test plan" in text and "control" in text:
+            print("🔁 Forced routing: LINK_TEST_PLAN_CONTROL")
+            return link_test_plan_control(raw_text)
 
         # Risk ↔ Control
         if "risk" in text and "control" in text:
@@ -44,7 +50,7 @@ def route_pipeline(intent: str, raw_text: str):
             print("🔁 Forced routing: LINK_PROCESS_RISK")
             return link_process_risk(raw_text)
 
-        # ⭐ Process ↔ Sub-process (MAIN FIX)
+        # Process ↔ Sub-process (KEEP THIS LAST)
         if (
             "sub process" in text
             or "subprocess" in text
@@ -55,9 +61,13 @@ def route_pipeline(intent: str, raw_text: str):
             print("🔁 Forced routing: LINK_PROCESS_SUBPROCESS")
             return link_process_subprocess(raw_text)
 
+    # ======================================================
+    # 🔁 NORMAL INTENT-BASED ROUTING
+    # ======================================================
+    if intent == "LINK_TEST_PLAN_CONTROL":
+        return link_test_plan_control(raw_text)
 
-    # Intent-based linking (normal flow)
-    if intent == "LINK_RISK_CONTROL":
+    elif intent == "LINK_RISK_CONTROL":
         return link_risk_control(raw_text)
 
     elif intent == "LINK_PROCESS_RISK":
@@ -98,6 +108,10 @@ def route_pipeline(intent: str, raw_text: str):
 
     elif intent in ("VIEW_CONTROL", "QUERY_CONTROL"):
         return run_view_control_pipeline(intent, raw_text)
+    
+    elif intent in ("VIEW_TEST_PLAN", "QUERY_TEST_PLAN"):
+        return run_view_test_plan_pipeline(intent, raw_text)
+
 
     # ======================================================
     # ❌ FALLBACK
