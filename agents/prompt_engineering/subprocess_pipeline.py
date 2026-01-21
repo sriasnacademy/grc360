@@ -2,11 +2,13 @@ import json
 import re
 from groq import Groq
 from connectors.lambda_mysql import call_lambda
+from services.rag_service import save_process_to_rag
+from config.servicekeys import GROQ_API_KEY
 
 # -----------------------------------------
 # GROQ CLIENT
 # -----------------------------------------
-client = Groq(api_key="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")
+client = Groq(api_key=GROQ_API_KEY)
 
 
 # -----------------------------------------
@@ -19,7 +21,8 @@ def fetch_sub_porcess_template(intent):
         "where": {"template_name": intent}
     }
     result = call_lambda(payload)
-    return result["records"][0]["content"] if result.get("count", 0) > 0 else None
+    
+    return result
 
 
 # -----------------------------------------
@@ -65,9 +68,6 @@ def normalize_subprocess_data(data: dict):
     data["frequency"] = data.get("frequency", "").capitalize()
     data["status"] = data.get("status", "Active").capitalize()
 
-    # Ensure FK is int
-    data["process_id"] = data.get("process_id", 1)
-
     return data
 
 
@@ -80,7 +80,6 @@ def insert_subprocess(data):
         "table": "sub_processes",
         "data": {
             "sub_process_name": data.get("sub_process_name", ""),
-            "process_id": data.get("process_id", 1),
             "description": data.get("description", ""),
             "department": data.get("department", ""),
             "sub_process_owner": data.get("sub_process_owner", ""),
@@ -91,7 +90,10 @@ def insert_subprocess(data):
         }
     }
 
-    call_lambda(payload)
+    result = call_lambda(payload)
+    subprocessid = result.get("inserted_id")
+    
+    return subprocessid
 
 
 # -----------------------------------------
@@ -133,7 +135,9 @@ def run_subporcess_pipeline(intent, raw_text):
         if not cleaned_data:
             return "❌ Subprocess data normalization failed"
 
-        insert_subprocess(cleaned_data)
+        subprocessid = insert_subprocess(cleaned_data)
+        
+        save_process_to_rag("SUB_PROCESS", cleaned_data, subprocessid)
 
         return "✅ Subprocess inserted successfully"
 

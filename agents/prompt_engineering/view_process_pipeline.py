@@ -1,26 +1,5 @@
 from connectors.lambda_mysql import call_lambda
-from services.rag_retrieval_service import rag_find_process_ids
-
-def extract_process_ids_from_rag(rag_results, min_similarity=0.5):
-    """
-    Returns process_ids sorted by similarity (high → low)
-    """
-    if not rag_results:
-        return []
-
-    filtered = []
-    for r in rag_results:
-        similarity = r[4]
-        if similarity >= min_similarity:
-            try:
-                filtered.append((int(r[2]), similarity))
-            except ValueError:
-                continue
-
-    # sort by similarity desc
-    filtered.sort(key=lambda x: x[1], reverse=True)
-
-    return [pid for pid, _ in filtered]
+from services.rag_retrieval_service import *
 
 def run_view_process_pipeline(intent: str, raw_text: str):
     try:

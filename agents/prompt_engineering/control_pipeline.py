@@ -2,8 +2,9 @@ import json
 from groq import Groq
 from connectors.lambda_mysql import call_lambda
 from services.rag_service import save_process_to_rag
+from config.servicekeys import GROQ_API_KEY
 
-client = Groq(api_key="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")
+client = Groq(api_key=GROQ_API_KEY)
 
 
 def fetch_control_template(intent):
@@ -46,7 +47,8 @@ def insert_control(data):
             "control_category": data.get("control_category", "")
         }
     }
-    control_id = call_lambda(payload)
+    result = call_lambda(payload)
+    control_id = result.get("inserted_id")
     return control_id
 
 def safe_json_parse(text: str):
