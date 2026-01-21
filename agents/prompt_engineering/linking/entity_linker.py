@@ -223,3 +223,51 @@ def link_risk_control(prompt: str):
     })
 
     return "✅ Risk linked to Control using Groq LLM"
+
+# ------------------------------------------------
+# Test Plan ↔ Control (LLM powered)
+# ------------------------------------------------
+def link_test_plan_control(prompt: str):
+
+    test_plan_result = call_lambda({
+        "action": "select",
+        "table": "test_plan"
+    })
+
+    control_result = call_lambda({
+        "action": "select",
+        "table": "control"
+    })
+
+    test_plans = test_plan_result.get("records", [])
+    controls = control_result.get("records", [])
+
+    test_plan_id = llm_pick_id(
+        "test plan",
+        prompt,
+        test_plans,
+        "test_plan_id",
+        "test_plan_name"
+    )
+
+    control_id = llm_pick_id(
+        "control",
+        prompt,
+        controls,
+        "control_id",
+        "control_name"
+    )
+
+    if not test_plan_id or not control_id:
+        return "❌ Unable to Linking Test Plan or Control using LLM"
+
+    call_lambda({
+        "action": "insert",
+        "table": "test_plan_control_map",
+        "data": {
+            "test_plan_id": test_plan_id,
+            "control_id": control_id
+        }
+    })
+
+    return "✅ Test Plan linked to Control using Groq LLM"
