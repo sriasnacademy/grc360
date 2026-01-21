@@ -56,6 +56,40 @@ Related Risk ID: {data.get('risk_id')}
                 "owner": data.get("control_owner")
             }
         }
+        
+    elif entity_type == "SUB_PROCESS":
+        return {
+        "rag_text": f"""
+Sub Process Name: {data.get('sub_process_name')}
+Description: {data.get('description')}
+Department: {data.get('department')}
+Owner: {data.get('sub_process_owner')}
+Frequency: {data.get('frequency')}
+Inputs: {', '.join(data.get('triggers', []))}
+Outputs: {', '.join(data.get('outcomes', []))}
+""".strip(),
 
+        "source_table": "sub_processes",
+        "metadata": {
+            "department": data.get("department"),
+            "owner": data.get("sub_process_owner"),
+            "frequency": data.get("frequency")
+        }
+    }
+        
+    elif entity_type == "TEST_PLAN":
+        return {
+        "rag_text": f"""
+Test Plan Name: {data.get('test_plan_name')}
+Description: {data.get('description')}
+Module: {data.get('module')}
+Status: {data.get('stauts')}
+""".strip(),
+
+        "source_table": "test_plan",
+        "metadata": {
+        }
+    }
+         
     else:
         raise ValueError(f"Unsupported entity type: {entity_type}")
