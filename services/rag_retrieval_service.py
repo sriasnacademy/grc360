@@ -18,3 +18,24 @@ def rag_find_process_ids(query: str,entitytype:str, top_k: int = 3):
     db = PGVectorDB(function_name="grc-vectordb")
     result = db.execute(query,params)
     return result
+
+def extract_process_ids_from_rag(rag_results, min_similarity=0.5):
+    """
+    Returns process_ids sorted by similarity (high → low)
+    """
+    if not rag_results:
+        return []
+
+    filtered = []
+    for r in rag_results:
+        similarity = r[4]
+        if similarity >= min_similarity:
+            try:
+                filtered.append((int(r[2]), similarity))
+            except ValueError:
+                continue
+
+    # sort by similarity desc
+    filtered.sort(key=lambda x: x[1], reverse=True)
+
+    return [pid for pid, _ in filtered]
