@@ -9,7 +9,6 @@ from ui.Create_Risk import risk
 from ui.Create_Control import create_control
 from ui.Create_subprocess import create_subporcess
 from agents.intent_agent import IntentAgent
-from ui.control_execution_gui import ControlExecutionGUI
 from ui.control_report_gui import ControlReportGUI
 from services.bedrock_healthcheck import bedrock_healthcheck
 
