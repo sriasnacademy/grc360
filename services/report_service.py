@@ -10,11 +10,18 @@ class ReportService:
         return call_lambda({
             "action": "select",
             "table": "test_plan",
-            "columns": ["test_plan_id", "control_id", "test_plan_name"],
+            "columns": ["test_plan_id", "test_plan_name"],
             "where": {"test_plan_id": test_plan_id}
         }).get("records", [])
 
 
+    def fetch_all_test_plans(self):
+        return call_lambda({
+            "action": "select",
+            "table": "test_plan",
+            "columns": ["test_plan_id", "test_plan_name"]
+        }).get("records", [])
+        
     # -----------------------------
     # Test Steps
     # -----------------------------
