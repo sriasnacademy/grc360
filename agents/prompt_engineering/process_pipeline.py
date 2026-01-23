@@ -3,7 +3,10 @@ from connectors.lambda_mysql import call_lambda
 import json
 from services.rag_service import save_process_to_rag
 from config.servicekeys import GROQ_API_KEY
-
+from services.rag_retrieval_service import (
+    extract_process_ids_from_rag_for_duplicate_check,
+    rag_find_process_ids
+)
 # ----------------------------
 # Groq AI Client
 # ----------------------------
@@ -41,11 +44,11 @@ def detect_category(intent, raw_text):
 # ----------------------------
 # Fetch prompt template using Lambda
 # ----------------------------
-def fetch_prompt_template(category):
+def fetch_prompt_template(intent):
     payload = {
         "action": "select",
         "table": "prompt_templates",
-        "where": {"category": category}
+        "where": {"template_name": intent}
     }
     result = call_lambda(payload)
     if result["count"] == 0:
@@ -113,18 +116,34 @@ def run_process_pipeline(intent, raw_text):
     try:
         print("📤 Intent received:", intent)
 
-        # Step 1: Detect category
-        category = detect_category(intent, raw_text)
-        if not category:
-            return "❌ No category mapping found."
-        print("📂 Category:", category)
+        # ===============================
+        # STEP 0: RAG DUPLICATE CHECK
+        # ===============================
 
-        # Step 2: Fetch prompt template
-        template = fetch_prompt_template(category)
+        rag_results = rag_find_process_ids(
+            query=raw_text,
+            entitytype="PROCESS",
+            top_k=3
+        )
+
+        duplicate_process_ids = extract_process_ids_from_rag_for_duplicate_check(
+            rag_results,
+            min_similarity=0.7
+        )
+
+        # 🚫 DUPLICATE FOUND → STOP
+        if duplicate_process_ids:
+            print("🚫 Duplicate process IDs found:", duplicate_process_ids)
+            return "❌ Process already exists. Duplicate detected in RAG."
+
+        # ===============================
+        # ELSE → CONTINUE PIPELINE
+        # ===============================
+
+        template = fetch_prompt_template(intent)
         if not template:
             return "❌ Prompt template not found."
 
-        # Step 3: Build strong JSON prompt for Groq AI
         final_prompt = f"""
 {template}
 
@@ -137,7 +156,6 @@ Return ONLY valid JSON.
 ✅ Output must start with {{ and end with }}.
 """
 
-        # Step 4: Call Groq AI
         response_ai = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": final_prompt}],
@@ -147,16 +165,13 @@ Return ONLY valid JSON.
         output = response_ai.choices[0].message.content.strip()
         clean = output.replace("```json", "").replace("```", "").strip()
 
-        # Step 5: Parse AI JSON output
         data = json.loads(clean)
 
-        # Step 6: Insert into DB via Lambda
         process_id = insert_into_table(data)
 
-        #Step 7: Insert into PGVector via Lambda
-        save_process_to_rag("PROCESS",data,process_id)
+        save_process_to_rag("PROCESS", data, process_id)
 
-        return "✅ Process Created Successfully.."
+        return "✅ Process Created Successfully."
 
     except json.JSONDecodeError:
         return "❌ AI returned invalid JSON."
