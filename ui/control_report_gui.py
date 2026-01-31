@@ -83,68 +83,50 @@ class ControlReportGUI:
 
     def build_execute_tab(self):
 
+        # -------------------------------
+        # SEARCH BAR
+        # -------------------------------
         top = tk.Frame(self.execute_tab, pady=10)
-        top.pack()
+        top.pack(fill="x", padx=20)
 
-        # -------------------------------
-        # TEST PLAN DROPDOWN
-        # -------------------------------
-        tk.Label(top, text="Test Plan:", font=("Segoe UI", 11)).grid(row=0, column=0, padx=5)
+        tk.Label(top, text="🔍 Search:", font=("Segoe UI", 11)).pack(side="left")
 
-        self.test_plan_map = {}   # name → id
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", self.filter_cards)
 
-        self.plan_combo = ttk.Combobox(
+        tk.Entry(
             top,
-            width=30,
-            state="readonly",
+            textvariable=self.search_var,
+            width=40,
             font=("Segoe UI", 11)
+        ).pack(side="left", padx=10)
+
+        # -------------------------------
+        # SCROLLABLE CONTAINER
+        # -------------------------------
+        container = tk.Frame(self.execute_tab)
+        container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        canvas = tk.Canvas(container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+
+        self.cards_frame = tk.Frame(canvas)
+
+        self.cards_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        self.plan_combo.grid(row=0, column=1, padx=5)
 
-        self.load_test_plans()
+        canvas.create_window((0, 0), window=self.cards_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-        # -------------------------------
-        # INFO ICON
-        # -------------------------------
-        info_btn = tk.Button(
-            top,
-            text="ℹ",
-            font=("Segoe UI", 12, "bold"),
-            fg="#0D6EFD",
-            bd=0,
-            command=self.show_test_plan_info
-        )
-        info_btn.grid(row=0, column=2, padx=5)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
         # -------------------------------
-        # EXECUTE BUTTON
+        # LOAD TEST PLANS
         # -------------------------------
-        tk.Button(
-            top,
-            text="Execute",
-            bg="#198754",
-            fg="white",
-            font=("Segoe UI", 11, "bold"),
-            command=self.generate_report
-        ).grid(row=0, column=3, padx=15)
-
-        # -------------------------------
-        # RESULTS BOX
-        # -------------------------------
-        self.text = ScrolledText(
-            self.execute_tab,
-            width=130,
-            height=28,
-            font=("Consolas", 10)
-        )
-        self.text.pack(pady=15)
-
-        self.text.tag_config("title", foreground="#0B5ED7", font=("Segoe UI", 14, "bold"))
-        self.text.tag_config("header", font=("Segoe UI", 11, "bold"))
-        self.text.tag_config("pass", foreground="#198754", font=("Segoe UI", 11, "bold"))
-        self.text.tag_config("fail", foreground="#DC3545", font=("Segoe UI", 11, "bold"))
-        self.text.tag_config("muted", foreground="#6C757D")
-
+        self.load_executable_test_plans()
 
     def show_test_plan_info(self):
         svc = ReportService()
@@ -172,20 +154,103 @@ class ControlReportGUI:
 
         messagebox.showinfo("Test Plan Information", info)
 
-    def load_test_plans(self):
+    def load_executable_test_plans(self):
         svc = ReportService()
-        plans = svc.fetch_all_test_plans()
+        self.all_plans = svc.fetch_executable_test_plans()
+        self.render_cards(self.all_plans)
 
-        names = []
-        for p in plans:
-            names.append(p["test_plan_name"])
-            self.test_plan_map[p["test_plan_name"]] = p["test_plan_id"]
+    
+    def render_cards(self, plans):
+        self.clear_cards()
 
-        self.plan_combo["values"] = names
-
-        if names:
-            self.plan_combo.current(0)
+        for plan in plans:
+            self.create_test_plan_card(plan)
             
+    def create_test_plan_card(self, plan):
+
+        card = tk.Frame(
+            self.cards_frame,
+            bd=1,
+            relief="solid",
+            padx=15,
+            pady=10
+        )
+        card.pack(fill="x", pady=6)
+
+        card.plan_data = plan
+
+        left = tk.Frame(card)
+        left.pack(side="left", fill="x", expand=True)
+
+        tk.Label(
+            left,
+            text=f"Test Plan - {plan['test_plan_name']}",
+            font=("Segoe UI", 10, "bold")
+        ).pack(anchor="w")
+
+        tk.Label(
+            left,
+            text=f"Control - {plan['control_name']}",
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=2)
+
+        tk.Label(
+            left,
+            text=f"Risk - {plan['risk_name']}",
+            font=("Segoe UI", 10)
+        ).pack(anchor="w")
+
+        tk.Label(
+            left,
+            text=f"Process - {plan['process_name']}",
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=2)
+
+        tk.Button(
+            card,
+            text="Test",
+            width=10,
+            bg="#E9D8A6",
+            font=("Segoe UI", 10, "bold"),
+            command=lambda p=plan: self.execute_test_plan(p)
+        ).pack(side="right", padx=10)
+
+        
+    def filter_cards(self, *_):
+        keyword = self.search_var.get().lower()
+
+        for card in self.cards_frame.winfo_children():
+            plan = card.plan_data
+
+            text = (
+                plan["test_plan_name"]
+                + plan["control_name"]
+                + plan["risk_name"]
+                + plan["process_name"]
+            ).lower()
+
+            if keyword in text:
+                card.pack(fill="x", pady=6)
+            else:
+                card.pack_forget()
+
+
+    def execute_test_plan(self, plan):
+
+        report = self.runner.generate_control_report(plan["test_plan_id"])
+
+        if "error" in report:
+            messagebox.showerror("Error", report["error"])
+            return
+
+        self.show_report_popup(report)
+
+
+    
+    def clear_cards(self):
+        for w in self.cards_frame.winfo_children():
+            w.destroy()
+
     # ======================================================
     # EXECUTION LOGIC (UNCHANGED CORE)
     # ======================================================
@@ -205,3 +270,72 @@ class ControlReportGUI:
 
             self.text.insert(tk.END, f"Control : {ctrl['control_name']}\n")
             self.text.insert(tk.END, f"Result  : {icon}\n\n", tag)
+            
+    def show_report_popup(self, report):
+
+        popup = tk.Toplevel(self.root)
+        popup.title("Control Execution Report")
+        popup.geometry("900x600")
+        popup.transient(self.root)
+        popup.grab_set()  # modal window
+
+        # ---------- HEADER ----------
+        header = tk.Frame(popup, pady=10)
+        header.pack(fill="x")
+
+        tk.Label(
+            header,
+            text="Control Effectiveness Report",
+            font=("Segoe UI", 14, "bold"),
+            fg="#0B5ED7"
+        ).pack(anchor="w", padx=15)
+
+        tk.Label(
+            header,
+            text=f"Test Plan: {report['test_plan']}",
+            font=("Segoe UI", 11, "bold")
+        ).pack(anchor="w", padx=15)
+
+        tk.Label(
+            header,
+            text=f"Control: {report['control']}",
+            font=("Segoe UI", 11)
+        ).pack(anchor="w", padx=15)
+
+        result_color = "#198754" if report["result"] == "PASS" else "#DC3545"
+
+        tk.Label(
+            header,
+            text=f"Result: {report['result']}",
+            font=("Segoe UI", 11, "bold"),
+            fg=result_color
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+
+        # ---------- REPORT BODY ----------
+        body = ScrolledText(
+            popup,
+            font=("Consolas", 10),
+            wrap="word"
+        )
+        body.pack(fill="both", expand=True, padx=15, pady=10)
+
+        # ---------- CONTENT ----------
+        for proc in report["procedures"]:
+            body.insert(tk.END, f"STEP: {proc['step']}\n", "header")
+
+            for task in proc["tasks"]:
+                body.insert(tk.END, f"  Task: {task['task_name']}\n")
+
+                if task["results"]:
+                    for r in task["results"]:
+                        body.insert(
+                            tk.END,
+                            f"    - {r['evidence_result']}  ({r['executed_at']})\n"
+                        )
+                else:
+                    body.insert(tk.END, "    - No evidence\n")
+
+            body.insert(tk.END, "\n")
+
+        body.configure(state="disabled")
+
