@@ -86,16 +86,40 @@ class ReportService:
     # -----------------------------
     def fetch_test_steps(self, test_plan_id):
         return call_lambda({
-            "action": "select",
-            "table": "test_steps",
-            "columns": [
-                "test_step_id",
-                "control_assertion",
-                "status",
-            ],
-            "where": {"test_plan_id": test_plan_id}
+            "action": "raw_sql",
+            "sql": """
+                SELECT 
+                    tsr.test_step_id,
+                    ts.control_assertion,
+                    tsr.status,
+                    tsr.reason
+                FROM test_step_results tsr
+                JOIN test_steps ts 
+                    ON ts.test_step_id = tsr.test_step_id
+                WHERE tsr.test_plan_id = %s
+                ORDER BY tsr.executed_at
+            """,
+            "params": [test_plan_id]
         }).get("records", [])
 
+    
+    def fetch_executed_tasks(self, test_plan_id):
+        return call_lambda({
+            "action": "raw_sql",
+            "sql": """
+                SELECT 
+                    tsr.test_step_id,
+                    ts.control_assertion,
+                    tsr.status,
+                    tsr.reason
+                FROM test_step_results tsr
+                JOIN test_steps ts 
+                    ON ts.test_step_id = tsr.test_step_id
+                WHERE tsr.test_plan_id = %s
+                ORDER BY tsr.executed_at
+            """,
+            "params": [test_plan_id]
+        }).get("records", [])
 
     # -----------------------------
     # Test Tasks (Runner-compatible name)

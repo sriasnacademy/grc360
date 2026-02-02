@@ -1,5 +1,5 @@
 from connectors.lambda_mysql import call_lambda
-from services.helper import build_lambda_payload_from_query
+from services.helper import build_lambda_payload_from_query_rawSql
 
 class TestTaskService:
 
@@ -9,20 +9,11 @@ class TestTaskService:
         Returns a list of dicts with keys:
         test_task_id, task_name, status, records_count, reason, evidence
         """
+        test_step_id = test_step.get("test_step_id")
         payload = {
-            "action": "select",
-            "table": "test_tasks",
-            "columns": [
-                "test_task_id",
-                "task_name",
-                "evidence_query",
-                "status"
-            ],
-            "where": {
-                "test_step_id": test_step.get("test_step_id"),
-                "status": "ACTIVE"
-            },
-            "order_by": "execution_order"
+            "action": "raw_sql",
+            "sql": " SELECT t.* FROM test_tasks t JOIN teststep_testtask_map m ON t.test_task_id = m.test_task_id WHERE m.test_step_id = %s ORDER BY m.execution_order ",
+            "params": [test_step_id]   # list is correct
         }
 
         try:
@@ -48,7 +39,7 @@ class TestTaskService:
 
                 # Build Lambda payload
                 try:
-                    evidence_payload = build_lambda_payload_from_query(evidence_query)
+                    evidence_payload = build_lambda_payload_from_query_rawSql(evidence_query)
                 except Exception as e:
                     results.append({
                         "test_task_id": test_task_id,
@@ -67,10 +58,8 @@ class TestTaskService:
                 results.append({
                     "test_task_id": test_task_id,
                     "task_name": task_name,
-                    "status": "EXECUTED",
-                    "records_count": len(evidence_records),
-                    "reason": "Evidence collected" if evidence_records else "No records returned",
-                    "evidence": evidence_records
+                    "evidence": evidence_records,
+                    "evidence_records_from_table": r.get("evaluation_rule")   # <-- AI uses this
                 })
 
             return results

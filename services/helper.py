@@ -55,3 +55,19 @@ def build_lambda_payload_from_query(sql: str) -> dict:
         payload["order_by"] = order_by
 
     return payload
+
+def build_lambda_payload_from_query_rawSql(sql: str, params: list | None = None) -> dict:
+    if not sql or not sql.strip():
+        raise ValueError("Empty SQL")
+
+    payload = {
+        "action": "raw_sql",
+        "sql": sql.strip()
+    }
+
+    if params:
+        if not isinstance(params, list):
+            raise ValueError("params must be a list")
+        payload["params"] = params
+
+    return payload
