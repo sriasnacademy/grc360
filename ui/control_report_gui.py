@@ -4,6 +4,7 @@ from tkinter.scrolledtext import ScrolledText
 from runners.report_runner import ControlReportRunner
 from tkinter import messagebox
 from services.report_service import ReportService
+from runners.control_execution_runner import ControlExecutionRunner
 
 
 class ControlReportGUI:
@@ -237,15 +238,14 @@ class ControlReportGUI:
 
     def execute_test_plan(self, plan):
 
-        report = self.runner.generate_control_report(plan["test_plan_id"])
+        runner = ControlExecutionRunner()
+        report = runner.execute_test_plan(plan["test_plan_id"])
 
         if "error" in report:
             messagebox.showerror("Error", report["error"])
             return
 
         self.show_report_popup(report)
-
-
     
     def clear_cards(self):
         for w in self.cards_frame.winfo_children():
@@ -270,72 +270,124 @@ class ControlReportGUI:
 
             self.text.insert(tk.END, f"Control : {ctrl['control_name']}\n")
             self.text.insert(tk.END, f"Result  : {icon}\n\n", tag)
-            
+
+
+
+    def status_badge(parent, text, bg):
+        lbl = tk.Label(
+            parent,
+            text=text,
+            bg=bg,
+            fg="white",
+            font=("Segoe UI", 11, "bold"),
+            padx=12,
+            pady=6
+        )
+        lbl.pack(side="left", padx=10)
+
+
     def show_report_popup(self, report):
 
         popup = tk.Toplevel(self.root)
         popup.title("Control Execution Report")
-        popup.geometry("900x600")
+        popup.geometry("950x650")
         popup.transient(self.root)
-        popup.grab_set()  # modal window
+        popup.grab_set()
 
-        # ---------- HEADER ----------
-        header = tk.Frame(popup, pady=10)
+        # ================= HEADER =================
+        header = tk.Frame(popup, bg="#F8F9FA", pady=15)
         header.pack(fill="x")
 
         tk.Label(
             header,
             text="Control Effectiveness Report",
-            font=("Segoe UI", 14, "bold"),
-            fg="#0B5ED7"
-        ).pack(anchor="w", padx=15)
+            font=("Segoe UI", 16, "bold"),
+            bg="#F8F9FA"
+        ).pack(anchor="w", padx=20)
 
         tk.Label(
             header,
-            text=f"Test Plan: {report['test_plan']}",
-            font=("Segoe UI", 11, "bold")
-        ).pack(anchor="w", padx=15)
+            text=f"Test Plan: {report['test_plan']}   |   Control: {report['control']}",
+            font=("Segoe UI", 11),
+            bg="#F8F9FA"
+        ).pack(anchor="w", padx=20, pady=(5, 10))
 
-        tk.Label(
-            header,
-            text=f"Control: {report['control']}",
-            font=("Segoe UI", 11)
-        ).pack(anchor="w", padx=15)
+        # ================= SUMMARY =================
+        summary = tk.Frame(popup, pady=10)
+        summary.pack(fill="x", padx=20)
+
+        total_steps = len(report["procedures"])
+        failed_steps = sum(
+            1 for p in report["procedures"]
+            if any(
+                r["evidence_result"] == "FAIL"
+                for t in p["tasks"]
+                for r in t["results"]
+            )
+        )
+
+        passed_steps = total_steps - failed_steps
+        pass_ratio = int((passed_steps / total_steps) * 100) if total_steps else 0
 
         result_color = "#198754" if report["result"] == "PASS" else "#DC3545"
+        self.status_badge(summary, report["result"], result_color)
 
         tk.Label(
-            header,
-            text=f"Result: {report['result']}",
-            font=("Segoe UI", 11, "bold"),
-            fg=result_color
-        ).pack(anchor="w", padx=15, pady=(0, 10))
+            summary,
+            text=f"Steps: {total_steps} | Passed: {passed_steps} | Failed: {failed_steps}",
+            font=("Segoe UI", 11)
+        ).pack(side="left")
 
-        # ---------- REPORT BODY ----------
+        # ================= PROGRESS BAR =================
+        progress_frame = tk.Frame(popup)
+        progress_frame.pack(fill="x", padx=20, pady=(5, 15))
+
+        progress = ttk.Progressbar(
+            progress_frame,
+            orient="horizontal",
+            length=400,
+            mode="determinate"
+        )
+        progress["value"] = pass_ratio
+        progress.pack(side="left")
+
+        tk.Label(
+            progress_frame,
+            text=f"{pass_ratio}% Passed",
+            font=("Segoe UI", 10)
+        ).pack(side="left", padx=10)
+
+        # ================= DETAILS =================
         body = ScrolledText(
             popup,
             font=("Consolas", 10),
             wrap="word"
         )
-        body.pack(fill="both", expand=True, padx=15, pady=10)
+        body.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # ---------- CONTENT ----------
         for proc in report["procedures"]:
-            body.insert(tk.END, f"STEP: {proc['step']}\n", "header")
+            step_failed = any(
+                r["evidence_result"] == "FAIL"
+                for t in proc["tasks"]
+                for r in t["results"]
+            )
+
+            step_icon = "❌" if step_failed else "✅"
+            body.insert(tk.END, f"{step_icon} STEP: {proc['step']}\n", "step")
 
             for task in proc["tasks"]:
-                body.insert(tk.END, f"  Task: {task['task_name']}\n")
+                body.insert(tk.END, f"    Task: {task['task_name']}\n")
 
                 if task["results"]:
                     for r in task["results"]:
+                        icon = "❌" if r["evidence_result"] == "FAIL" else "✓"
                         body.insert(
                             tk.END,
-                            f"    - {r['evidence_result']}  ({r['executed_at']})\n"
+                            f"      {icon} {r['evidence_result']}  ({r['executed_at']})\n"
                         )
                 else:
-                    body.insert(tk.END, "    - No evidence\n")
+                    body.insert(tk.END, "      ⚠ No evidence\n")
 
             body.insert(tk.END, "\n")
 
         body.configure(state="disabled")
-
