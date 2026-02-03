@@ -16,48 +16,26 @@ class ControlExecutionRunner:
         result_svc = TestResultService()
         issue_svc = IssueService()
         report_svc = ReportService()
-        ai = AIEvaluator()
-        report_run = ControlReportRunner()
+        evaluator = AIEvaluator()
 
-        plans = report_svc.fetch_test_plan_with_control(test_plan_id)
-        if not plans:
-            return {"error": "Test plan not found"}
-
-        plan = plans[0]
+        plan = report_svc.fetch_test_plan_with_control(test_plan_id)[0]
         control_failed = False
 
-        steps = step_svc.fetch_test_steps(test_plan_id)
+        for step in step_svc.fetch_test_steps(test_plan_id):
 
-        for step in steps:
-
-            # 🔥 EXECUTE tasks
-            executed_tasks = task_svc.execute_tasks(step)
-
-            step_payload = {
-                "step_name": step["control_assertion"],
-                "tasks": executed_tasks
-            }
-
-            # 🔥 AI evaluation
-            evaluated = ai.evaluate_test_step(step_payload)
-
-            # 🔥 Persist execution
-            result_svc.store_step_results(
-                evaluated,
-                step,
+            tasks = task_svc.execute_tasks(step)
+            evaluated = evaluator.evaluate_step(step["control_assertion"], tasks)
+            task_id = tasks.get("test_task_id")
+            result_svc.store_task_results(
+                evaluated["tasks"],
                 test_plan_id,
-                plan["control_id"]
+                plan["control_id"],
             )
 
             if evaluated["status"] == "FAIL":
                 control_failed = True
 
-        # 🔥 Trigger issue
         if control_failed:
-            issue_svc.raise_control_failure(
-                test_plan_id,
-                plan["control_id"]
-            )
+            issue_svc.raise_control_failure(task_id, test_plan_id, plan["control_id"])
 
-        # 🔥 Generate report from persisted data
-        return report_run.generate_control_report(test_plan_id)
+        return ControlReportRunner().generate_control_report(test_plan_id)
