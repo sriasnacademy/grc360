@@ -290,72 +290,76 @@ class ControlReportGUI:
 
         popup = tk.Toplevel(self.root)
         popup.title("Control Execution Report")
-        popup.geometry("950x650")
+        popup.geometry("1000x700")
         popup.transient(self.root)
         popup.grab_set()
 
         # ================= HEADER =================
-        header = tk.Frame(popup, bg="#F8F9FA", pady=15)
+        header = tk.Frame(popup, bg="#F1F3F5", pady=18)
         header.pack(fill="x")
 
         tk.Label(
             header,
             text="Control Effectiveness Report",
-            font=("Segoe UI", 16, "bold"),
-            bg="#F8F9FA"
-        ).pack(anchor="w", padx=20)
+            font=("Segoe UI", 18, "bold"),
+            bg="#F1F3F5"
+        ).pack(anchor="w", padx=25)
 
         tk.Label(
             header,
             text=f"Test Plan: {report['test_plan']}   |   Control: {report['control']}",
             font=("Segoe UI", 11),
-            bg="#F8F9FA"
-        ).pack(anchor="w", padx=20, pady=(5, 10))
+            bg="#F1F3F5"
+        ).pack(anchor="w", padx=25, pady=(6, 0))
 
         # ================= SUMMARY =================
-        summary = tk.Frame(popup, pady=10)
-        summary.pack(fill="x", padx=20)
+        summary = tk.Frame(popup, pady=15)
+        summary.pack(fill="x", padx=25)
 
-        total_steps = len(report["procedures"])
-        failed_steps = sum(
-            1 for p in report["procedures"]
-            if any(
-                r["evidence_result"] == "FAIL"
-                for t in p["tasks"]
-                for r in t["results"]
-            )
-        )
+        total_tasks = len(report["tasks"])
+        failed_tasks = sum(1 for t in report["tasks"] if t["status"] == "FAIL")
+        passed_tasks = total_tasks - failed_tasks
+        pass_ratio = int((passed_tasks / total_tasks) * 100) if total_tasks else 0
 
-        passed_steps = total_steps - failed_steps
-        pass_ratio = int((passed_steps / total_steps) * 100) if total_steps else 0
-
+        # ---- Result Badge ----
         result_color = "#198754" if report["result"] == "PASS" else "#DC3545"
-        self.status_badge(summary, report["result"], result_color)
+        result_text = "CONTROL PASSED" if report["result"] == "PASS" else "CONTROL FAILED"
 
         tk.Label(
             summary,
-            text=f"Steps: {total_steps} | Passed: {passed_steps} | Failed: {failed_steps}",
-            font=("Segoe UI", 11)
+            text=result_text,
+            font=("Segoe UI", 12, "bold"),
+            fg="white",
+            bg=result_color,
+            padx=24,
+            pady=10
         ).pack(side="left")
 
-        # ================= PROGRESS BAR =================
-        progress_frame = tk.Frame(popup)
-        progress_frame.pack(fill="x", padx=20, pady=(5, 15))
+        # ---- Metrics ----
+        metrics = tk.Frame(summary)
+        metrics.pack(side="left", padx=40)
 
-        progress = ttk.Progressbar(
+        tk.Label(metrics, text=f"Total Tasks: {total_tasks}", font=("Segoe UI", 11)).pack(anchor="w")
+        tk.Label(metrics, text=f"Passed: {passed_tasks}", font=("Segoe UI", 11), fg="#198754").pack(anchor="w")
+        tk.Label(metrics, text=f"Failed: {failed_tasks}", font=("Segoe UI", 11), fg="#DC3545").pack(anchor="w")
+
+        # ================= PROGRESS =================
+        progress_frame = tk.Frame(popup)
+        progress_frame.pack(fill="x", padx=25, pady=(5, 18))
+
+        ttk.Progressbar(
             progress_frame,
             orient="horizontal",
-            length=400,
-            mode="determinate"
-        )
-        progress["value"] = pass_ratio
-        progress.pack(side="left")
+            length=450,
+            mode="determinate",
+            value=pass_ratio
+        ).pack(side="left")
 
         tk.Label(
             progress_frame,
-            text=f"{pass_ratio}% Passed",
+            text=f"{pass_ratio}% Tasks Passed",
             font=("Segoe UI", 10)
-        ).pack(side="left", padx=10)
+        ).pack(side="left", padx=12)
 
         # ================= DETAILS =================
         body = ScrolledText(
@@ -363,31 +367,31 @@ class ControlReportGUI:
             font=("Consolas", 10),
             wrap="word"
         )
-        body.pack(fill="both", expand=True, padx=20, pady=10)
+        body.pack(fill="both", expand=True, padx=25, pady=10)
 
-        for proc in report["procedures"]:
-            step_failed = any(
-                r["evidence_result"] == "FAIL"
-                for t in proc["tasks"]
-                for r in t["results"]
+        for task in report["tasks"]:
+
+            icon = "❌" if task["status"] == "FAIL" else "✅"
+
+            body.insert(
+                tk.END,
+                f"{icon} TASK: {task['task_name']}  [{task['status']}]\n"
             )
 
-            step_icon = "❌" if step_failed else "✅"
-            body.insert(tk.END, f"{step_icon} STEP: {proc['step']}\n", "step")
+            body.insert(
+                tk.END,
+                f"      Reason: {task['evidence_result']}\n"
+            )
 
-            for task in proc["tasks"]:
-                body.insert(tk.END, f"    Task: {task['task_name']}\n")
-
-                if task["results"]:
-                    for r in task["results"]:
-                        icon = "❌" if r["evidence_result"] == "FAIL" else "✓"
-                        body.insert(
-                            tk.END,
-                            f"      {icon} {r['evidence_result']}  ({r['executed_at']})\n"
-                        )
-                else:
-                    body.insert(tk.END, "      ⚠ No evidence\n")
+            if task.get("executed_at"):
+                body.insert(
+                    tk.END,
+                    f"      Executed At: {task['executed_at']}\n"
+                )
 
             body.insert(tk.END, "\n")
 
         body.configure(state="disabled")
+
+
+
