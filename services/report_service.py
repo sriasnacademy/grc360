@@ -3,6 +3,23 @@ from connectors.lambda_mysql import call_lambda
 
 class ReportService:
 
+    def fetch_executed_tasks(self, test_plan_id):
+        return call_lambda({
+            "action": "raw_sql",
+            "sql": """
+                SELECT
+                    t.task_name,
+                    r.status,
+                    r.evidence_result,
+                    r.executed_at
+                FROM test_task_results r
+                JOIN test_tasks t ON t.test_task_id = r.test_task_id
+                WHERE r.test_plan_id = %s
+                ORDER BY r.executed_at
+            """,
+            "params": [test_plan_id]
+        }).get("records", [])
+    
     def fetch_executable_test_plans(self):
         return call_lambda({
             "action": "raw_sql",
@@ -60,86 +77,6 @@ class ReportService:
                 ORDER BY tp.test_plan_name
             """
         }).get("records", [])
-
-
-    # -----------------------------
-    # Test Plan
-    # -----------------------------
-    def fetch_test_plan(self, test_plan_id):
-        return call_lambda({
-            "action": "select",
-            "table": "test_plan",
-            "columns": ["test_plan_id", "test_plan_name"],
-            "where": {"test_plan_id": test_plan_id}
-        }).get("records", [])
-
-
-    def fetch_all_test_plans(self):
-        return call_lambda({
-            "action": "select",
-            "table": "test_plan",
-            "columns": ["test_plan_id", "test_plan_name"]
-        }).get("records", [])
-        
-    # -----------------------------
-    # Test Steps
-    # -----------------------------
-    def fetch_test_steps(self, test_plan_id):
-        return call_lambda({
-            "action": "raw_sql",
-            "sql": """
-                SELECT 
-                    tsr.test_step_id,
-                    ts.control_assertion,
-                    tsr.status,
-                    tsr.reason
-                FROM test_step_results tsr
-                JOIN test_steps ts 
-                    ON ts.test_step_id = tsr.test_step_id
-                WHERE tsr.test_plan_id = %s
-                ORDER BY tsr.executed_at
-            """,
-            "params": [test_plan_id]
-        }).get("records", [])
-
-    
-    def fetch_executed_tasks(self, test_plan_id):
-        return call_lambda({
-            "action": "raw_sql",
-            "sql": """
-                SELECT 
-                    tsr.test_step_id,
-                    ts.control_assertion,
-                    tsr.status,
-                    tsr.reason
-                FROM test_step_results tsr
-                JOIN test_steps ts 
-                    ON ts.test_step_id = tsr.test_step_id
-                WHERE tsr.test_plan_id = %s
-                ORDER BY tsr.executed_at
-            """,
-            "params": [test_plan_id]
-        }).get("records", [])
-
-    # -----------------------------
-    # Test Tasks (Runner-compatible name)
-    # -----------------------------
-    def fetch_tasks_by_step(self, test_step_id):
-        return call_lambda({
-            "action": "raw_sql",
-            "sql": """
-                SELECT
-                    tt.test_task_id,
-                    tt.task_name,
-                    tsttmp.execution_order
-                FROM test_tasks tt
-                JOIN teststep_testtask_map tsttmp
-                    ON tt.test_task_id = tsttmp.test_task_id
-                WHERE tsttmp.test_step_id = %s
-            """,
-            "params": [test_step_id]
-        }).get("records", [])
-        
         
     def fetch_test_plan_with_control(self, test_plan_id):
         return call_lambda({
@@ -159,68 +96,3 @@ class ReportService:
             """,
             "params": [test_plan_id]
         }).get("records", [])
-
-
-
-    # -----------------------------
-    # Task Results (Evidence)
-    # -----------------------------
-    def fetch_task_results(self, test_task_id):
-        return call_lambda({
-            "action": "select",
-            "table": "test_task_results",
-            "columns": [
-                "evidence_payload",
-                "evidence_result",
-                "executed_at"
-            ],
-            "where": {"test_task_id": test_task_id}
-        }).get("records", [])
-
-
-    # -----------------------------
-    # Control
-    # -----------------------------
-    def fetch_control(self, control_id):
-        return call_lambda({
-            "action": "select",
-            "table": "control",
-            "columns": [
-                "control_id",
-                "control_name"
-            ],
-            "where": {"control_id": control_id}
-        }).get("records", [])
-
-
-    # -----------------------------
-    # Process impact via Risk
-    # Control → Risk → Process
-    # -----------------------------
-    def fetch_processes_by_control(self, control_id):
-
-        processes = set()
-
-        # Step 1: Get risks for control
-        risks = call_lambda({
-            "action": "select",
-            "table": "risk_control_map",
-            "columns": ["risk_id"],
-            "where": {"control_id": control_id}
-        }).get("records", [])
-
-        # Step 2: For each risk, get processes
-        for r in risks:
-            risk_id = r["risk_id"]
-
-            rows = call_lambda({
-                "action": "select",
-                "table": "process_risk_map",
-                "columns": ["process_id"],
-                "where": {"risk_id": risk_id}
-            }).get("records", [])
-
-            for p in rows:
-                processes.add(p["process_id"])
-
-        return list(processes)
