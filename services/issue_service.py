@@ -3,7 +3,7 @@ from datetime import datetime
 
 class IssueService:
 
-    def raise_control_failure(self, task_id, test_plan_id, control_id):
+    def raise_control_failure(self, task_id, control_id,test_plan_id):
 
         call_lambda({
             "action": "insert",
