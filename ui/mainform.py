@@ -1,6 +1,5 @@
 import tkinter as tk
-from tkinter import Menu, ttk, scrolledtext
-
+from tkinter import Menu, scrolledtext
 from ui.postgresUI import create_ui
 from ui.guardrails_process import open_process_screen
 from ui.Create_Process import prompt_Template
@@ -11,6 +10,8 @@ from ui.Create_subprocess import create_subporcess
 from agents.intent_agent import IntentAgent
 from ui.control_report_gui import ControlReportGUI
 from ui.rag_bulk_ui import MainUI
+from ui.overalldata import GRCUISkeleton
+
 
 agent = IntentAgent()
 
@@ -267,6 +268,10 @@ class GRC360ChatModel:
 def open_mysql_pg_screen():
     create_ui(tk.Toplevel())
 
+def open_overalldata_screen():
+    root = tk.Toplevel()
+    app = GRCUISkeleton(root)
+    
 def execute_rag():
     root = tk.Toplevel()
     app = MainUI(root)
@@ -313,8 +318,8 @@ def start_main_form():
 
     # Meghana menu
     meghana_menu = Menu(menubar, tearoff=0)
-    meghana_menu.add_command(label="Guardrails Screen", command=open_guardrails_screen)
-    menubar.add_cascade(label="Meghana", menu=meghana_menu)
+    meghana_menu.add_command(label="View Overall Data", command=open_overalldata_screen)
+    menubar.add_cascade(label="Data", menu=meghana_menu)
 
     # Swetha menu
     swetha_menu = Menu(menubar, tearoff=0)
