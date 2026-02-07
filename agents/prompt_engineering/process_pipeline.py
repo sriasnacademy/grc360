@@ -7,42 +7,15 @@ from services.rag_retrieval_service import (
     extract_process_ids_from_rag_for_duplicate_check,
     rag_find_process_ids
 )
+from services.bedrock_check_all import check_content_with_guardrails
+
 # ----------------------------
 # Groq AI Client
 # ----------------------------
 client = Groq(api_key=GROQ_API_KEY)
 
 # ----------------------------
-# Detect category using Lambda
-# ----------------------------
-def detect_category(intent, raw_text):
-    # Direct mapping: intent = category
-    payload = {
-        "action": "select",
-        "table": "prompt_templates",
-        "where": {"category": intent}
-    }
-    result = call_lambda(payload)
-    if result["count"] > 0:
-        return result["records"][0]["category"]
-
-    # Fallback: keyword matching
-    payload = {
-        "action": "select",
-        "table": "prompt_templates",
-        "columns": ["category"]
-    }
-    result = call_lambda(payload)
-    raw_lower = raw_text.lower()
-    for item in result["records"]:
-        if item["category"].lower() in raw_lower:
-            return item["category"]
-
-    return result["records"][0]["category"] if result["records"] else None
-
-
-# ----------------------------
-# Fetch prompt template using Lambda
+# Fetch prompt template
 # ----------------------------
 def fetch_prompt_template(intent):
     payload = {
@@ -54,36 +27,9 @@ def fetch_prompt_template(intent):
     if result["count"] == 0:
         return None
     return result["records"][0]["content"]
-# -----------------------------------------
-# NORMALIZE PROCESS DATA
-# -----------------------------------------
-def normalize_process_data(data: dict):
-    if not data:
-        return None
-
-    # Clean and strip string fields
-    for key in ["process_name", "description", "department", "owner", "frequency"]:
-        if key in data and isinstance(data[key], str):
-            data[key] = " ".join(data[key].split()).strip()
-
-    # Capitalize frequency
-    if "frequency" in data and isinstance(data["frequency"], str):
-        data["frequency"] = data["frequency"].capitalize()
-
-    # Convert triggers list → comma-separated string
-    triggers = data.get("triggers")
-    if isinstance(triggers, list):
-        data["triggers"] = ", ".join(str(t).strip() for t in triggers)
-
-    # Convert outcomes list → comma-separated string
-    outcomes = data.get("outcomes")
-    if isinstance(outcomes, list):
-        data["outcomes"] = ", ".join(str(o).strip() for o in outcomes)
-
-    return data
 
 # ----------------------------
-# Insert into DB using Lambda
+# Insert into DB
 # ----------------------------
 def insert_into_table(data):
     payload = {
@@ -101,27 +47,36 @@ def insert_into_table(data):
     }
 
     result = call_lambda(payload)
-
     process_id = result.get("inserted_id")
+
     if not process_id:
         raise RuntimeError("MySQL insert failed – no process_id returned")
 
     return process_id
 
-
 # ----------------------------
-# Main pipeline function
+# MAIN PIPELINE (UNCHANGED FLOW)
 # ----------------------------
 def run_process_pipeline(intent, raw_text):
     try:
         print("📤 Intent received:", intent)
 
         # ===============================
-        # STEP 0: RAG DUPLICATE CHECK
+        # STEP 0: BEDROCK GUARDRAILS
         # ===============================
+        guardrail_result = check_content_with_guardrails(raw_text)
 
+        if not guardrail_result["allowed"]:
+            # 🔴 HARD STOP – USER SEES BLOCK MESSAGE
+            return guardrail_result["message"]
+
+        safe_text = guardrail_result["safe_text"] or raw_text
+
+        # ===============================
+        # STEP 1: RAG DUPLICATE CHECK
+        # ===============================
         rag_results = rag_find_process_ids(
-            query=raw_text,
+            query=safe_text,
             entitytype="PROCESS",
             top_k=3
         )
@@ -131,15 +86,13 @@ def run_process_pipeline(intent, raw_text):
             min_similarity=0.7
         )
 
-        # 🚫 DUPLICATE FOUND → STOP
         if duplicate_process_ids:
             print("🚫 Duplicate process IDs found:", duplicate_process_ids)
-            return "❌ Process already exists. Duplicate detected in RAG."
+            return "❌ Process already exists. Duplicate detected."
 
         # ===============================
-        # ELSE → CONTINUE PIPELINE
+        # STEP 2: EXISTING LOGIC CONTINUES
         # ===============================
-
         template = fetch_prompt_template(intent)
         if not template:
             return "❌ Prompt template not found."
@@ -148,7 +101,7 @@ def run_process_pipeline(intent, raw_text):
 {template}
 
 ### Raw Text:
-{raw_text}
+{safe_text}
 
 ### Instructions:
 Return ONLY valid JSON.
@@ -168,7 +121,6 @@ Return ONLY valid JSON.
         data = json.loads(clean)
 
         process_id = insert_into_table(data)
-
         save_process_to_rag("PROCESS", data, process_id)
 
         return "✅ Process Created Successfully."
