@@ -10,7 +10,7 @@ from ui.Create_Control import create_control
 from ui.Create_subprocess import create_subporcess
 from agents.intent_agent import IntentAgent
 from ui.control_report_gui import ControlReportGUI
-from services.bedrock_healthcheck import bedrock_healthcheck
+from ui.rag_bulk_ui import MainUI
 
 agent = IntentAgent()
 
@@ -267,6 +267,10 @@ class GRC360ChatModel:
 def open_mysql_pg_screen():
     create_ui(tk.Toplevel())
 
+def execute_rag():
+    root = tk.Toplevel()
+    app = MainUI(root)
+
 def open_guardrails_screen():
     open_process_screen(tk.Toplevel())
 
@@ -314,7 +318,7 @@ def start_main_form():
 
     # Swetha menu
     swetha_menu = Menu(menubar, tearoff=0)
-    swetha_menu.add_command(label="Bedrock Health Check Screen", command=bedrock_healthcheck)
+    swetha_menu.add_command(label="Bedrock Health Check Screen", command=execute_rag)
     menubar.add_cascade(label="Swetha", menu=swetha_menu)
 
     # Process menu
