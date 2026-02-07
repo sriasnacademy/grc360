@@ -13,12 +13,35 @@ class ReportService:
                     r.evidence_result,
                     r.executed_at
                 FROM test_task_results r
-                JOIN test_tasks t ON t.test_task_id = r.test_task_id
+                JOIN test_tasks t 
+                    ON t.test_task_id = r.test_task_id
                 WHERE r.test_plan_id = %s
+                AND r.executed_at BETWEEN (
+                        SELECT MIN(executed_at)
+                        FROM test_task_results
+                        WHERE test_plan_id = %s
+                        AND executed_at >= (
+                                SELECT MAX(executed_at)
+                                FROM test_task_results
+                                WHERE test_plan_id = %s
+                        ) - INTERVAL 5 SECOND
+                )
+                AND (
+                        SELECT MAX(executed_at)
+                        FROM test_task_results
+                        WHERE test_plan_id = %s
+                )
                 ORDER BY r.executed_at
             """,
-            "params": [test_plan_id]
+            "params": [
+                test_plan_id,
+                test_plan_id,
+                test_plan_id,
+                test_plan_id
+            ]
         }).get("records", [])
+
+
     
     def fetch_executable_test_plans(self):
         return call_lambda({

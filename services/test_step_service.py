@@ -10,21 +10,9 @@ class TestStepService:
         """
 
         payload = {
-            "action": "select",
-            "table": "test_steps",  # ✅ required for Lambda
-            "columns": [
-                "test_step_id",
-                "control_assertion",
-                "assertion_description",
-                "control_area",
-                "risk_type",
-                "status"
-            ],
-            "where": {
-                "test_plan_id": test_plan_id,
-                "status": "ACTIVE"
-            },
-            "order_by": "step_order"
+            "action": "raw_sql",
+            "sql": "SELECT ts.test_step_id, ts.control_assertion,ts.assertion_description,ts.control_area,ts.risk_type,ts.status FROM test_steps ts join testplan_teststep_map tptsmp on ts.test_step_id = tptsmp.test_step_id WHERE tptsmp.test_plan_id = %s AND status = 'ACTIVE' ORDER BY tptsmp.step_order",
+            "params": [test_plan_id]
         }
 
         try:
