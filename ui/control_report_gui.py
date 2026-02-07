@@ -285,6 +285,65 @@ class ControlReportGUI:
         )
         lbl.pack(side="left", padx=10)
 
+    def render_issue_section(self, parent, report):
+        issue_frame = tk.Frame(parent, bg="#F8D7DA", bd=1, relief="solid")
+        issue_frame.pack(fill="x", padx=25, pady=(10, 20))
+
+        tk.Label(
+            issue_frame,
+            text="🚨 Issue Automatically Created",
+            font=("Segoe UI", 14, "bold"),
+            bg="#F8D7DA",
+            fg="#842029"
+        ).pack(anchor="w", padx=15, pady=(12, 4))
+
+        issue_id = f"ISSUE-{report['test_plan']}-{report['control']}"
+        severity = "HIGH"
+
+        tk.Label(
+            issue_frame,
+            text=f"Issue ID      : {issue_id}",
+            font=("Segoe UI", 11),
+            bg="#F8D7DA"
+        ).pack(anchor="w", padx=15)
+
+        tk.Label(
+            issue_frame,
+            text=f"Severity      : {severity}",
+            font=("Segoe UI", 11, "bold"),
+            fg="#DC3545",
+            bg="#F8D7DA"
+        ).pack(anchor="w", padx=15)
+
+        tk.Label(
+            issue_frame,
+            text="Issue Summary : Control failed due to one or more test step failures",
+            font=("Segoe UI", 11),
+            bg="#F8D7DA"
+        ).pack(anchor="w", padx=15, pady=(4, 6))
+
+        tk.Label(
+            issue_frame,
+            text="Failed Tasks:",
+            font=("Segoe UI", 11, "bold"),
+            bg="#F8D7DA"
+        ).pack(anchor="w", padx=15, pady=(6, 2))
+
+        for task in report["tasks"]:
+            if task["status"] == "FAIL":
+                tk.Label(
+                    issue_frame,
+                    text=f"• {task['task_name']}",
+                    font=("Segoe UI", 10),
+                    bg="#F8D7DA"
+                ).pack(anchor="w", padx=30)
+
+        tk.Label(
+            issue_frame,
+            text="Issue Status  : OPEN",
+            font=("Segoe UI", 11, "bold"),
+            bg="#F8D7DA"
+        ).pack(anchor="w", padx=15, pady=(6, 12))
 
     def show_report_popup(self, report):
 
@@ -360,6 +419,10 @@ class ControlReportGUI:
             text=f"{pass_ratio}% Tasks Passed",
             font=("Segoe UI", 10)
         ).pack(side="left", padx=12)
+        
+        
+        if report["result"] == "FAIL":
+            self.render_issue_section(popup,report)
 
         # ================= DETAILS =================
         body = ScrolledText(
@@ -393,5 +456,6 @@ class ControlReportGUI:
 
         body.configure(state="disabled")
 
+    
 
 
