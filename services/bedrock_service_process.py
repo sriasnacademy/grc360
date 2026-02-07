@@ -3,66 +3,57 @@ import os
 import boto3
 from dotenv import load_dotenv
 
-# Load AWS creds from .env
-load_dotenv()
+# ================= LOAD ENV =================
 
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-MODEL_ID = "amazon.nova-lite-v1:0"  # lightweight Bedrock model
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-# ----------------------------
-# Bedrock client
-# ----------------------------
-def get_bedrock_client():
-    return boto3.client(
-        "bedrock-runtime",
-        region_name=AWS_REGION,
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-    )
+bedrock_runtime = boto3.client(
+    "bedrock-runtime",
+    region_name=os.getenv("AWS_REGION"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+)
 
-# ----------------------------
-# Output Guardrail
-# ----------------------------
-def bedrock_duplicate_check(user_input, rag_results, top_k=3):
-    """
-    Uses Bedrock to decide if a candidate is a true duplicate
-    """
-    client = get_bedrock_client()
-    
-    top_results = rag_results[:top_k]
-    similar_processes = [{"id": r[2], "text": r[3], "similarity": r[4]} for r in top_results]
+print("✅ AWS credentials loaded")
 
-    prompt = f"""
-You are an AI assistant that enforces guardrails on process insertion.
+# ================= INPUT =================
 
-User wants to insert: "{user_input}"
-
-These are the similar processes found in the database:
-{json.dumps(similar_processes, indent=2)}
-
-Your task:
-1. Decide if the new process is a duplicate (same intent + same entities).
-2. If duplicate, respond with: 
-   {{ "duplicate": true, "existing_process_id": <id>, "message": "Duplicate found. Insertion blocked." }}
-3. If safe to insert, respond with: 
-   {{ "duplicate": false, "message": "Process can be safely inserted." }}
-
-Respond ONLY in valid JSON.
+user_text = """
+My name is Megha.
+My email is megha@gmail.com.
+My phone number is 9876543210.
 """
 
-    response = client.invoke_model(
-        modelId=MODEL_ID,
-        body=json.dumps({"inputText": prompt})
-    )
+prompt = f"""
+Repeat the text below exactly, but mask any sensitive information.
 
-    # Bedrock returns bytes, decode JSON
-    output_text = json.loads(response["body"].read())["outputText"]
+Text:
+{user_text}
+"""
 
-    try:
-        decision = json.loads(output_text)
-    except json.JSONDecodeError:
-        decision = {"duplicate": False, "message": "Process can be safely inserted."}
+payload = {
+    "messages": [
+        {
+            "role": "user",
+            "content": [{"text": prompt}]
+        }
+    ]
+}
 
-    return decision
+# ================= GUARDRAIL =================
+
+response = bedrock_runtime.invoke_model(
+    modelId="amazon.nova-micro-v1:0",
+    body=json.dumps(payload),
+    guardrailIdentifier="kt0thsln579m",
+    guardrailVersion="DRAFT",
+    contentType="application/json",
+    accept="application/json",
+)
+
+# ================= OUTPUT =================
+
+result = json.loads(response["body"].read())
+print("\n🔐 MASKED OUTPUT:\n")
+print(result["output"]["message"]["content"][0]["text"])
