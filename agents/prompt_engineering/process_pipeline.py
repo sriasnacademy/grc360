@@ -3,10 +3,6 @@ from connectors.lambda_mysql import call_lambda
 import json
 from services.rag_service import save_process_to_rag
 from config.servicekeys import GROQ_API_KEY
-from services.rag_retrieval_service import (
-    extract_process_ids_from_rag_for_duplicate_check,
-    rag_find_process_ids
-)
 from services.bedrock_check_all import check_content_with_guardrails
 
 # ----------------------------
@@ -65,30 +61,13 @@ def run_process_pipeline(intent, raw_text):
         # STEP 0: BEDROCK GUARDRAILS
         # ===============================
         guardrail_result = check_content_with_guardrails(raw_text)
-
+        print(guardrail_result)
         if not guardrail_result["allowed"]:
             # 🔴 HARD STOP – USER SEES BLOCK MESSAGE
             return guardrail_result["message"]
 
         safe_text = guardrail_result["safe_text"] or raw_text
-
-        # ===============================
-        # STEP 1: RAG DUPLICATE CHECK
-        # ===============================
-        rag_results = rag_find_process_ids(
-            query=safe_text,
-            entitytype="PROCESS",
-            top_k=3
-        )
-
-        duplicate_process_ids = extract_process_ids_from_rag_for_duplicate_check(
-            rag_results,
-            min_similarity=0.7
-        )
-
-        if duplicate_process_ids:
-            print("🚫 Duplicate process IDs found:", duplicate_process_ids)
-            return "❌ Process already exists. Duplicate detected."
+        print(safe_text)
 
         # ===============================
         # STEP 2: EXISTING LOGIC CONTINUES
@@ -111,7 +90,7 @@ Return ONLY valid JSON.
 
         response_ai = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": final_prompt}],
+             messages=[{"role": "user", "content": final_prompt}],
             temperature=0.2
         )
 
