@@ -54,7 +54,7 @@ class ControlExecutionRunner:
                     # =====================================================
                     # RAISE ISSUE ONCE PER CONTROL
                     # =====================================================
-                    if control_failed:
+                    if failed_task_ids:
                         issue_svc.raise_control_failure(
                             task_id=task["test_task_id"],
                             control_id=plan["control_id"],
