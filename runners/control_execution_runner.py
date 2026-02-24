@@ -5,6 +5,8 @@ from services.issue_service import IssueService
 from services.report_service import ReportService
 from engine.ai_evaluator import AIEvaluator
 from runners.report_runner import ControlReportRunner
+from workflow.engine import WorkflowEngine
+from workflow.event_dispatcher import WorkflowEventDispatcher
 
 
 class ControlExecutionRunner:
@@ -55,10 +57,22 @@ class ControlExecutionRunner:
                     # RAISE ISSUE ONCE PER CONTROL
                     # =====================================================
                     if failed_task_ids:
-                        issue_svc.raise_control_failure(
+                        issue_id = issue_svc.raise_control_failure(
                             task_id=task["test_task_id"],
                             control_id=plan["control_id"],
                             test_plan_id=test_plan_id,
+                        )
+                        
+                        engine = WorkflowEngine()
+                        dispatcher = WorkflowEventDispatcher(engine)
+
+                        dispatcher.raise_event(
+                            event_name="ISSUE_CREATED",
+                            payload={
+                                "entity_id": issue_id,
+                                "control_id": plan["control_id"],
+                                "test_plan_id": test_plan_id
+                            }
                         )
       
         # =====================================================
