@@ -5,7 +5,7 @@ class IssueService:
 
     def raise_control_failure(self, task_id, control_id,test_plan_id):
 
-        call_lambda({
+        result = call_lambda({
             "action": "insert",
             "table": "issues",
             "data": {
@@ -17,3 +17,5 @@ class IssueService:
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
         })
+        issue_id = result.get("inserted_id")
+        return issue_id
