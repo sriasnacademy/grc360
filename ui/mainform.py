@@ -11,7 +11,7 @@ from agents.intent_agent import IntentAgent
 from ui.control_report_gui import ControlReportGUI
 from ui.rag_bulk_ui import MainUI
 from ui.overalldata import GRCUISkeleton
-
+from ui.main_bedrock_guardrail_ui import open_guardrail_window
 
 agent = IntentAgent()
 
@@ -294,6 +294,9 @@ def Create_Risk_Screen():
 def Create_SubProcess():
     create_subporcess(tk.Toplevel())
 
+def open_main_bedrock_guardrail():
+    open_guardrail_window(tk.Toplevel())
+
 def Test_Execution():
     root = tk.Toplevel()
     app = ControlReportGUI(root)
@@ -324,6 +327,7 @@ def start_main_form():
     # Swetha menu
     swetha_menu = Menu(menubar, tearoff=0)
     swetha_menu.add_command(label="Bedrock Health Check Screen", command=execute_rag)
+    swetha_menu.add_command(label="Main Bedrock Gaudrail Testing",command=open_main_bedrock_guardrail)
     menubar.add_cascade(label="Swetha", menu=swetha_menu)
 
     # Process menu
