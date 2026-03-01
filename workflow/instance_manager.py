@@ -2,7 +2,7 @@ from connectors.lambda_mysql import call_lambda
 
 class WorkflowInstanceManager:
     
-    def get_eventcode_for_event(self, event_name):
+    def get_eventid_for_event(self, event_name):
         payload = {
             "action": "raw_sql",
             "sql": "SELECT e.event_name, e.event_id from event_registry WHERE e.event_name = %s AND e.active = 1;",
@@ -18,11 +18,11 @@ class WorkflowInstanceManager:
             print("❌ Lambda Fetch Error (Test Steps):", e)
         return []
     
-    def load_event_log(self, event_code):
+    def load_event_log(self, event_log_payload):
         payload = {
             "action": "raw_sql",
             "sql": "INSERT INTO `event_log`(`event_id`,`reference_id`,`payload`,`status`,`created_at`)VALUES(%s,%s,%s,%s,now())",
-            "params": [event_code,]
+            "params": [event_log_payload["event_id"],event_log_payload["reference_id"],self.get_eventid_for_event["payload"],"PENDING"]
         }
 
         try:
@@ -35,11 +35,11 @@ class WorkflowInstanceManager:
         return []
 
 
-    def get_workflow_by_event(self, event_code):
+    def get_workflow_by_event(self, event_id):
         payload = {
             "action": "raw_sql",
-            "sql": "SELECT e.event_name, w.workflow_id,w.workflow_name FROM event_registry e JOIN event_subscriptions s ON e.event_id = s.event_id JOIN workflow_definitions w ON s.workflow_id = w.workflow_id WHERE e.event_name = %s AND s.active = 1 AND w.active = 1",
-            "params": [event_code]
+            "sql": "SELECT e.event_id, e.event_name, w.workflow_id,w.workflow_name FROM event_registry e JOIN event_subscriptions s ON e.event_id = s.event_id JOIN workflow_definitions w ON s.workflow_id = w.workflow_id WHERE e.event_name = %s AND s.active = 1 AND w.active = 1",
+            "params": [event_id]
         }
 
         try:
