@@ -57,7 +57,7 @@ class ControlExecutionRunner:
                     # RAISE ISSUE ONCE PER CONTROL
                     # =====================================================
                     if failed_task_ids:
-                        issue_id = issue_svc.raise_control_failure(
+                        issue_result = issue_svc.raise_control_failure(
                             task_id=task["test_task_id"],
                             control_id=plan["control_id"],
                             test_plan_id=test_plan_id,
@@ -69,9 +69,8 @@ class ControlExecutionRunner:
                         dispatcher.raise_event(
                             event_name="ISSUE_CREATED",
                             payload={
-                                "entity_id": issue_id,
-                                "control_id": plan["control_id"],
-                                "test_plan_id": test_plan_id
+                                "reference_id": issue_result["issue_id"],
+                                "payload_for_eventlog": issue_result["issue_payload"]
                             }
                         )
       
