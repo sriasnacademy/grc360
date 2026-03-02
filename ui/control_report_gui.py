@@ -5,6 +5,7 @@ from runners.report_runner import ControlReportRunner
 from tkinter import messagebox
 from services.report_service import ReportService
 from runners.control_execution_runner import ControlExecutionRunner
+from ui.workflow_tracker_tab import WorkflowTrackerTab   # ✅ NEW
 
 
 class ControlReportGUI:
@@ -13,7 +14,7 @@ class ControlReportGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("GRC360 – Control Scheduler")
-        self.root.geometry("1100x650")
+        self.root.geometry("1200x700")                    # ✅ slightly wider for tracker
 
         self.runner = ControlReportRunner()
 
@@ -37,6 +38,9 @@ class ControlReportGUI:
 
         self.build_schedule_tab()
         self.build_execute_tab()
+
+        # ✅ Workflow Tracker Tab (self-contained, just pass the notebook)
+        WorkflowTrackerTab(self.tabs)
 
     # ======================================================
     # SCHEDULE TAB
@@ -160,13 +164,12 @@ class ControlReportGUI:
         self.all_plans = svc.fetch_executable_test_plans()
         self.render_cards(self.all_plans)
 
-    
     def render_cards(self, plans):
         self.clear_cards()
 
         for plan in plans:
             self.create_test_plan_card(plan)
-            
+
     def create_test_plan_card(self, plan):
 
         card = tk.Frame(
@@ -216,7 +219,6 @@ class ControlReportGUI:
             command=lambda p=plan: self.execute_test_plan(p)
         ).pack(side="right", padx=10)
 
-        
     def filter_cards(self, *_):
         keyword = self.search_var.get().lower()
 
@@ -235,7 +237,6 @@ class ControlReportGUI:
             else:
                 card.pack_forget()
 
-
     def execute_test_plan(self, plan):
 
         runner = ControlExecutionRunner()
@@ -246,7 +247,7 @@ class ControlReportGUI:
             return
 
         self.show_report_popup(report)
-    
+
     def clear_cards(self):
         for w in self.cards_frame.winfo_children():
             w.destroy()
@@ -270,8 +271,6 @@ class ControlReportGUI:
 
             self.text.insert(tk.END, f"Control : {ctrl['control_name']}\n")
             self.text.insert(tk.END, f"Result  : {icon}\n\n", tag)
-
-
 
     def status_badge(parent, text, bg):
         lbl = tk.Label(
@@ -419,10 +418,9 @@ class ControlReportGUI:
             text=f"{pass_ratio}% Tasks Passed",
             font=("Segoe UI", 10)
         ).pack(side="left", padx=12)
-        
-        
+
         if report["result"] == "FAIL":
-            self.render_issue_section(popup,report)
+            self.render_issue_section(popup, report)
 
         # ================= DETAILS =================
         body = ScrolledText(
@@ -455,7 +453,3 @@ class ControlReportGUI:
             body.insert(tk.END, "\n")
 
         body.configure(state="disabled")
-
-    
-
-
