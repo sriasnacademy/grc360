@@ -70,6 +70,8 @@ class ControlExecutionRunner:
                             event_name="ISSUE_CREATED",
                             payload={
                                 "reference_id": issue_result["issue_id"],
+                                "module_name": "ISSUE",          # ✅ Add this
+                                "performed_by": "SYSTEM",    # ✅ Add this (whatever your user variable is)
                                 "payload_for_eventlog": issue_result["issue_payload"]
                             }
                         )
