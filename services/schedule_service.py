@@ -54,3 +54,104 @@ class ScheduleRepository:
         except Exception as e:
             print("❌ Lambda Insert Error (Schedule):", e)
             return None
+
+    def fetch_schedules(self, status=None) -> list:
+        """
+        Fetch all schedule rows joined with test plan name for the report panel.
+        Optionally filter by status e.g. 'PENDING', 'COMPLETED', etc.
+        Returns a list of dicts.
+        """
+        if status:
+            sql = """
+                SELECT
+                    s.id,
+                    s.test_plan_id,
+                    COALESCE(tp.test_plan_name, CONCAT('Plan #', s.test_plan_id)) AS test_plan_name,
+                    s.scheduled_datetime,
+                    s.recurrence,
+                    s.status,
+                    s.created_at
+                FROM test_plan_scheduling s
+                LEFT JOIN test_plan tp ON tp.test_plan_id = s.test_plan_id
+                WHERE s.status = %s
+                ORDER BY s.scheduled_datetime DESC
+            """
+            params = [status]
+        else:
+            sql = """
+                SELECT
+                    s.id,
+                    s.test_plan_id,
+                    COALESCE(tp.test_plan_name, CONCAT('Plan #', s.test_plan_id)) AS test_plan_name,
+                    s.scheduled_datetime,
+                    s.recurrence,
+                    s.status,
+                    s.created_at
+                FROM test_plan_scheduling s
+                LEFT JOIN test_plan tp ON tp.test_plan_id = s.test_plan_id
+                ORDER BY s.scheduled_datetime DESC
+            """
+            params = []
+
+        payload = {
+            "action": "raw_sql",
+            "sql": sql,
+            "params": params
+        }
+
+        try:
+            response = call_lambda(payload)
+            records = response.get("records", [])
+
+            schedules = []
+            for r in records:
+                schedules.append({
+                    "id":                 r.get("id"),
+                    "test_plan_id":       r.get("test_plan_id"),
+                    "test_plan_name":     r.get("test_plan_name"),
+                    "scheduled_datetime": str(r.get("scheduled_datetime", "")),
+                    "recurrence":         r.get("recurrence"),
+                    "status":             r.get("status"),
+                    "created_at":         str(r.get("created_at", "")),
+                })
+
+            return schedules
+
+        except Exception as e:
+            print("❌ Lambda Fetch Error (Schedules):", e)
+            raise
+
+    def delete_schedule(self, schedule_id: int):
+        """
+        Hard-delete a schedule row by its primary key.
+        """
+        payload = {
+            "action": "raw_sql",
+            "sql": "DELETE FROM test_plan_scheduling WHERE id = %s",
+            "params": [schedule_id]
+        }
+
+        try:
+            call_lambda(payload)
+
+        except Exception as e:
+            print("❌ Lambda Delete Error (Schedule):", e)
+            raise
+
+    def update_schedule_status(self, schedule_id: int, status: str):
+        """
+        Update the status column of a schedule row.
+        e.g. status = 'CANCELLED'
+        """
+        payload = {
+            "action": "raw_sql",
+            "sql": "UPDATE test_plan_scheduling SET status = %s WHERE id = %s",
+            "params": [status, schedule_id]
+        }
+
+        try:
+            call_lambda(payload)
+
+        except Exception as e:
+            print("❌ Lambda Update Error (Schedule Status):", e)
+            raise
