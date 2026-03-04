@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import Menu, scrolledtext
+from tkinter import Menu
 from ui.postgresUI import create_ui
 from ui.guardrails_process import open_process_screen
 from ui.Create_Process import prompt_Template
@@ -15,375 +15,436 @@ from ui.main_bedrock_guardrail_ui import open_guardrail_window
 
 agent = IntentAgent()
 
-# ------------------------------
-# AI ASSISTANT WORKSPACE CLASS
-# ------------------------------
+# ─────────────────────────────────────────────
+#  DESIGN TOKENS  — full light theme
+# ─────────────────────────────────────────────
+CLR = {
+    "app_bg":         "#F0F4F8",
+    # sidebar (dark navy)
+    "sidebar_bg":     "#1E2A3A",
+    "sidebar_accent": "#2563EB",
+    "card_bg":        "#253447",
+    "card_hover":     "#2E3F56",
+    "card_border":    "#344A63",
+    "tag_bg":         "#1A3254",
+    "tag_fg":         "#60A5FA",
+    "sb_text_main":   "#F0F4FF",
+    "sb_text_dim":    "#94A3B8",
+    "sb_text_tiny":   "#64748B",
+    # chat panel (light)
+    "header_bg":      "#FFFFFF",
+    "header_border":  "#E2E8F0",
+    "msg_bg":         "#FFFFFF",
+    "msg_text":       "#1E293B",
+    "user_lbl":       "#2563EB",
+    "asst_lbl":       "#059669",
+    "sys_text":       "#94A3B8",
+    "divider":        "#E2E8F0",
+    # input
+    "input_bar_bg":   "#F8FAFC",
+    "input_bg":       "#FFFFFF",
+    "input_fg":       "#1E293B",
+    "input_border":   "#CBD5E1",
+    "input_focus":    "#2563EB",
+    "placeholder":    "#94A3B8",
+    # status
+    "accent":         "#2563EB",
+    "accent_hover":   "#1D4ED8",
+    "success":        "#10B981",
+    "warning":        "#F59E0B",
+    "error":          "#EF4444",
+    "scroll":         "#CBD5E1",
+}
+
+FT = {
+    "title":   ("Segoe UI", 14, "bold"),
+    "sub":     ("Segoe UI", 7,  "bold"),
+    "section": ("Segoe UI", 8,  "bold"),
+    "card":    ("Segoe UI", 10, "bold"),
+    "card_d":  ("Segoe UI", 8),
+    "header":  ("Segoe UI", 12, "bold"),
+    "hdr_s":   ("Segoe UI", 8),
+    "chat":    ("Segoe UI", 10),
+    "lbl":     ("Segoe UI", 8,  "bold"),
+    "input":   ("Segoe UI", 11),
+    "send":    ("Segoe UI", 10, "bold"),
+    "status":  ("Segoe UI", 9),
+    "small":   ("Segoe UI", 8),
+    "sys":     ("Segoe UI", 8),
+}
+
+SIDEBAR_W = 240   # sidebar fixed width in pixels
+
+
+# ─────────────────────────────────────────────
+#  SLIM SCROLLBAR
+# ─────────────────────────────────────────────
+class SlimScrollbar(tk.Canvas):
+    def __init__(self, parent, textwidget, **kwargs):
+        kwargs.pop("bg", None)
+        super().__init__(parent, width=6, bg=CLR["msg_bg"],
+                         highlightthickness=0, bd=0, **kwargs)
+        self._tw = textwidget
+        self._thumb = self.create_rectangle(
+            1, 0, 5, 40, fill=CLR["scroll"], outline="", width=0)
+        self._tw.configure(yscrollcommand=self._update)
+        self.bind("<ButtonPress-1>", self._jump)
+        self.bind("<B1-Motion>",     self._drag)
+        self._lo = 0.0; self._hi = 1.0
+
+    def _update(self, lo, hi):
+        self._lo, self._hi = float(lo), float(hi)
+        h = self.winfo_height() or 1
+        self.coords(self._thumb, 1, int(self._lo * h),
+                    5, max(int(self._lo * h) + 20, int(self._hi * h)))
+
+    def _jump(self, e): self._drag(e)
+    def _drag(self, e):
+        h = self.winfo_height() or 1
+        self._tw.yview_moveto(e.y / h - (self._hi - self._lo) / 2)
+
+
+# ─────────────────────────────────────────────
+#  SIDEBAR ACTION CARD
+# ─────────────────────────────────────────────
+class ActionCard(tk.Frame):
+    def __init__(self, parent, icon, title, desc, command, **kwargs):
+        super().__init__(parent, bg=CLR["card_bg"],
+                         highlightbackground=CLR["card_border"],
+                         highlightthickness=1, cursor="hand2", **kwargs)
+        self._cmd = command
+
+        badge = tk.Frame(self, bg=CLR["tag_bg"], padx=5, pady=4)
+        badge.pack(side="left", padx=(10, 8), pady=8)
+        tk.Label(badge, text=icon, bg=CLR["tag_bg"],
+                 fg=CLR["tag_fg"], font=("Segoe UI", 13)).pack()
+
+        txt = tk.Frame(self, bg=CLR["card_bg"])
+        txt.pack(side="left", fill="both", expand=True, pady=8)
+        tk.Label(txt, text=title, bg=CLR["card_bg"],
+                 fg=CLR["sb_text_main"], font=FT["card"], anchor="w").pack(fill="x")
+        tk.Label(txt, text=desc, bg=CLR["card_bg"],
+                 fg=CLR["sb_text_dim"], font=FT["card_d"], anchor="w").pack(fill="x")
+
+        tk.Label(self, text="›", bg=CLR["card_bg"],
+                 fg=CLR["sb_text_dim"], font=("Segoe UI", 15)).pack(side="right", padx=8)
+
+        for w in self._descendants():
+            w.bind("<Button-1>", self._fire)
+            w.bind("<Enter>",    self._on)
+            w.bind("<Leave>",    self._off)
+        self.bind("<Button-1>", self._fire)
+        self.bind("<Enter>",    self._on)
+        self.bind("<Leave>",    self._off)
+
+    def _descendants(self):
+        out = []
+        def walk(w):
+            for c in w.winfo_children(): out.append(c); walk(c)
+        walk(self); return out
+
+    def _fire(self, _=None): self._cmd()
+    def _on(self,  _=None):  self.config(bg=CLR["card_hover"])
+    def _off(self, _=None):  self.config(bg=CLR["card_bg"])
+
+
+# ─────────────────────────────────────────────
+#  MAIN CHAT CLASS
+# ─────────────────────────────────────────────
 class GRC360ChatModel:
 
-    global status_label,intent_label
     def __init__(self, workspace):
-        self.user_input = tk.Entry(width=80)
-        self.intent_label = tk.Label(text="Detected Intent: -")
-        self.status_label = tk.Label(text="")
+        workspace.configure(bg=CLR["app_bg"])
 
-        workspace.configure(bg="#F2F4F7")
+        # ══════════════════════════════════════
+        #  SIDEBAR — fixed width, full height via pack
+        # ══════════════════════════════════════
+        sidebar = tk.Frame(workspace, bg=CLR["sidebar_bg"], width=SIDEBAR_W)
+        sidebar.pack(side="left", fill="y")          # ← fill="y" stretches full height
+        sidebar.pack_propagate(False)                # ← respect fixed width
 
-        # -----------------------------------
-        # LEFT SIDEBAR (AI STYLE)
-        # -----------------------------------
-        sidebar = tk.Frame(workspace, bg="white", bd=1, relief="solid")
-        sidebar.place(x=10, y=10, width=260, height=500)
+        # accent stripe
+        tk.Frame(sidebar, bg=CLR["sidebar_accent"], width=4).pack(side="left", fill="y")
 
-        tk.Label(
-            sidebar,
-            text="GRC360",
-            bg="white",
-            font=("Arial", 16, "bold")
-        ).pack(pady=12)
+        body = tk.Frame(sidebar, bg=CLR["sidebar_bg"])
+        body.pack(side="left", fill="both", expand=True)
 
-        # Module
-        #tk.Label(sidebar, text="Module", bg="white", fg="#555").pack(anchor="w", padx=15)
-        #self.module_var = tk.StringVar(value="General")
-        #ttk.Combobox(
-        #   sidebar,
-        #    textvariable=self.module_var,
-        #   values=["General", "Guardrails", "Risk Assessment", "Processes", "Audit"],
-        #   state="readonly"
-        #).pack(padx=15, fill="x", pady=5)
+        # logo
+        logo_row = tk.Frame(body, bg=CLR["sidebar_bg"])
+        logo_row.pack(fill="x", padx=14, pady=(18, 2))
+        dot = tk.Canvas(logo_row, width=10, height=10,
+                        bg=CLR["sidebar_bg"], highlightthickness=0)
+        dot.create_oval(0, 0, 10, 10, fill=CLR["sidebar_accent"], outline="")
+        dot.pack(side="left", pady=3)
+        tk.Label(logo_row, text="  GRC360", bg=CLR["sidebar_bg"],
+                 fg=CLR["sb_text_main"], font=FT["title"]).pack(side="left")
 
-        # Guardrail Checkbox
-        #self.guardrail_var = tk.BooleanVar(value=True)
-        #tk.Checkbutton(
-        #   sidebar,
-        #   text="Apply Guardrails",
-        #    variable=self.guardrail_var,
-        #    bg="white"
-        #).pack(anchor="w", padx=15, pady=8)
+        tk.Label(body, text="GOVERNANCE · RISK · COMPLIANCE",
+                 bg=CLR["sidebar_bg"], fg=CLR["sb_text_tiny"],
+                 font=FT["sub"]).pack(anchor="w", padx=14, pady=(0, 10))
 
-        # -----------------------------
-        # QUICK ACTIONS (AI STYLE)
-        # -----------------------------
-        tk.Label(
-            sidebar,
-            text="⚡ Quick Actions",
-            bg="white",
-            font=("Arial", 12, "bold")
-        ).pack(anchor="w", padx=15, pady=(15, 5))
+        tk.Frame(body, bg=CLR["card_border"], height=1).pack(fill="x", padx=14, pady=(0, 10))
 
-        self.create_action_card(
-            sidebar,
-            "🧩 Create Process",
-            "Define a new business process",
-            prompt_Template_Screen
+        tk.Label(body, text="⚡  QUICK ACTIONS",
+                 bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"],
+                 font=FT["section"]).pack(anchor="w", padx=14, pady=(0, 6))
+
+        ActionCard(body, "🧩", "Create Process",
+                   "Define a new business process",
+                   prompt_Template_Screen).pack(fill="x", padx=10, pady=3)
+        ActionCard(body, "⚠", "Create Risk",
+                   "Identify & assess risks",
+                   Create_Risk_Screen).pack(fill="x", padx=10, pady=3)
+        ActionCard(body, "🛡", "Create Control",
+                   "Mitigate identified risks",
+                   Create_Control_Screen).pack(fill="x", padx=10, pady=3)
+
+        # status at bottom
+        self.intent_label = tk.Label(
+            body, text="Intent: —",
+            bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"], font=FT["status"])
+        self.intent_label.pack(side="bottom", anchor="w", padx=14, pady=(0, 8))
+
+        self.status_label = tk.Label(
+            body, text="● System Ready",
+            bg=CLR["sidebar_bg"], fg=CLR["success"], font=FT["status"])
+        self.status_label.pack(side="bottom", anchor="w", padx=14, pady=(0, 2))
+
+        # ══════════════════════════════════════
+        #  CHAT PANEL — fills remaining space
+        # ══════════════════════════════════════
+        chat_panel = tk.Frame(workspace, bg=CLR["msg_bg"])
+        chat_panel.pack(side="left", fill="both", expand=True)  # ← expand fills width & height
+
+        # ── Header ────────────────────────────
+        header = tk.Frame(chat_panel, bg=CLR["header_bg"], height=52)
+        header.pack(fill="x", side="top")
+        header.pack_propagate(False)
+
+        av = tk.Canvas(header, width=34, height=34,
+                       bg=CLR["header_bg"], highlightthickness=0)
+        av.create_oval(0, 0, 34, 34, fill=CLR["accent"], outline="")
+        av.create_text(17, 17, text="AI", fill="white",
+                       font=("Segoe UI", 10, "bold"))
+        av.pack(side="left", padx=(14, 10), pady=9)
+
+        htxt = tk.Frame(header, bg=CLR["header_bg"])
+        htxt.pack(side="left", pady=9)
+        tk.Label(htxt, text="AI Assistant", bg=CLR["header_bg"],
+                 fg="#1E293B", font=FT["header"]).pack(anchor="w")
+        tk.Label(htxt, text="GRC360 Intelligence Layer",
+                 bg=CLR["header_bg"], fg="#94A3B8",
+                 font=FT["hdr_s"]).pack(anchor="w")
+
+        pill = tk.Frame(header, bg="#ECFDF5",
+                        highlightbackground="#6EE7B7", highlightthickness=1)
+        pill.pack(side="right", padx=14, pady=16)
+        tk.Label(pill, text="● Online", bg="#ECFDF5", fg="#059669",
+                 font=("Segoe UI", 8, "bold"), padx=8, pady=2).pack()
+
+        tk.Frame(chat_panel, bg=CLR["header_border"], height=1).pack(fill="x")
+
+        # ── Input bar (pack BEFORE message area so it anchors to bottom) ──
+        tk.Frame(chat_panel, bg=CLR["divider"], height=1).pack(fill="x", side="bottom")
+
+        input_bar = tk.Frame(chat_panel, bg=CLR["input_bar_bg"], height=58)
+        input_bar.pack(fill="x", side="bottom")      # ← anchored to bottom
+        input_bar.pack_propagate(False)
+
+        self.user_input = tk.Entry(
+            input_bar,
+            font=FT["input"],
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["input_fg"],
+            relief="solid",
+            bd=1,
+            highlightthickness=2,
+            highlightbackground=CLR["input_border"],
+            highlightcolor=CLR["input_focus"],
         )
+        self.user_input.pack(side="left", fill="both", expand=True,
+                             padx=(14, 8), pady=10, ipady=3)
+        self.user_input.bind("<Return>", lambda e: self._send())
 
-        self.create_action_card(
-            sidebar,
-            "⚠ Create Risk",
-            "Identify & assess risks",
-            Create_Risk_Screen
-        )
+        # placeholder
+        self._ph = "Type your message here…"
+        self.user_input.insert(0, self._ph)
+        self.user_input.config(fg=CLR["placeholder"])
 
-        self.create_action_card(
-            sidebar,
-            "🛡 Create Control",
-            "Mitigate identified risks",
-            Create_Control_Screen
-        )
+        def _fi(_):
+            if self.user_input.get() == self._ph:
+                self.user_input.delete(0, tk.END)
+                self.user_input.config(fg=CLR["input_fg"])
 
-        # -----------------------------
-        # SYSTEM PROMPT
-        # -----------------------------
-        #tk.Label(sidebar, text="System Prompt", bg="white").pack(anchor="w", padx=15, pady=(15, 2))
-        #self.system_prompt = tk.Text(sidebar, height=4, width=28)
-        #self.system_prompt.insert(
-        #   "1.0",
-        #   "You are GRC360 assistant.\nProvide concise actionable answers."
-        #)
-        #self.system_prompt.pack(padx=15, pady=5)
+        def _fo(_):
+            if not self.user_input.get():
+                self.user_input.insert(0, self._ph)
+                self.user_input.config(fg=CLR["placeholder"])
 
-        # -----------------------------------
-        # CHAT AREA (UNCHANGED)
-        # -----------------------------------
-        chat_frame = tk.Frame(workspace, bg="white", bd=1, relief="solid")
-        chat_frame.place(x=280, y=10, width=600, height=500)
-
-        tk.Label(
-            chat_frame,
-            text="AI Assistant",
-            bg="white",
-            font=("Arial", 16, "bold")
-        ).pack(pady=10)
-
-        self.chat_box = scrolledtext.ScrolledText(
-            chat_frame,
-            wrap=tk.WORD,
-            font=("Arial", 11)
-        )
-
-        self.chat_box.tag_configure(
-           "assistant_msg",
-            justify="left",
-            lmargin1=10,
-            lmargin2=10,
-            rmargin=120
-        )
-
-        self.chat_box.tag_configure(
-            "user_msg",
-            justify="left",      # text alignment
-            lmargin1=120,        # PUSH message to right
-            lmargin2=120,
-            rmargin=10
-        )
-
-
-        self.chat_box.pack(padx=0, pady=5, fill="both", expand=True)
-        self.chat_box.insert(
-            tk.END,
-            "System: You are GRC360 assistant.\n",
-            "left_msg"
-        )
-        self.chat_box.insert(
-            tk.END,
-            "Assistant: Hi — how can I help you today?\n\n",
-            "left_msg"
-        )
-
-
-        self.chat_box.config(state="disabled")
-
-        input_frame = tk.Frame(chat_frame)
-        input_frame.pack(fill="x", pady=5)
-
-        self.user_input = tk.Entry(input_frame, font=("Arial", 12))
-        self.user_input.pack(side="left", fill="x", expand=True, padx=5)
-        self.user_input.bind("<Return>", lambda e: self.submit_text_Meghana())
+        self.user_input.bind("<FocusIn>",  _fi)
+        self.user_input.bind("<FocusOut>", _fo)
 
         tk.Button(
-            input_frame,
-            text="Send",
-            bg="#2563EB",
-            fg="white",
-            command=self.submit_text_Meghana
-        ).pack(side="right", padx=5)
+            input_bar,
+            text="Send  ›",
+            font=FT["send"],
+            bg=CLR["accent"],
+            fg="#FFFFFF",
+            activebackground=CLR["accent_hover"],
+            activeforeground="#FFFFFF",
+            relief="flat",
+            bd=0,
+            padx=16,
+            pady=6,
+            cursor="hand2",
+            command=self._send,
+        ).pack(side="right", padx=(0, 14), pady=10)
 
-    # -----------------------------------
-    # ACTION CARD CREATOR
-    # -----------------------------------
-    def create_action_card(self, parent, title, desc, command):
-        card = tk.Frame(parent, bg="#F9FAFB", bd=1, relief="solid", cursor="hand2")
-        card.pack(fill="x", padx=15, pady=6)
+        # ── Message area (fills the remaining middle space) ───
+        msg_wrap = tk.Frame(chat_panel, bg=CLR["msg_bg"])
+        msg_wrap.pack(fill="both", expand=True)      # ← takes all remaining height
 
-        card.bind("<Button-1>", lambda e: command())
+        self.chat_box = tk.Text(
+            msg_wrap,
+            wrap=tk.WORD,
+            font=FT["chat"],
+            bg=CLR["msg_bg"],
+            fg=CLR["msg_text"],
+            insertbackground=CLR["msg_text"],
+            selectbackground=CLR["accent"],
+            selectforeground="#FFFFFF",
+            relief="flat",
+            bd=0,
+            padx=20,
+            pady=14,
+            cursor="arrow",
+            spacing1=2,
+            spacing3=6,
+        )
+        self.chat_box.pack(side="left", fill="both", expand=True)
 
-        tk.Label(
-            card,
-            text=title,
-            bg="#F9FAFB",
-            font=("Arial", 11, "bold"),
-            anchor="w"
-        ).pack(fill="x", padx=10, pady=(6, 0))
+        SlimScrollbar(msg_wrap, self.chat_box).pack(
+            side="right", fill="y", pady=4, padx=(0, 2))
 
-        tk.Label(
-            card,
-            text=desc,
-            bg="#F9FAFB",
-            fg="#555",
-            font=("Arial", 9),
-            anchor="w"
-        ).pack(fill="x", padx=10, pady=(0, 6))
+        # text tags
+        self.chat_box.tag_configure("sys",
+            justify="center", foreground=CLR["sys_text"], font=FT["sys"])
+        self.chat_box.tag_configure("you_lbl",
+            lmargin1=180, lmargin2=180, rmargin=8,
+            foreground=CLR["user_lbl"], font=FT["lbl"])
+        self.chat_box.tag_configure("you_msg",
+            lmargin1=180, lmargin2=180, rmargin=8,
+            foreground=CLR["msg_text"], font=FT["chat"])
+        self.chat_box.tag_configure("bot_lbl",
+            lmargin1=8, lmargin2=8, rmargin=180,
+            foreground=CLR["asst_lbl"], font=FT["lbl"])
+        self.chat_box.tag_configure("bot_msg",
+            lmargin1=8, lmargin2=8, rmargin=180,
+            foreground=CLR["msg_text"], font=FT["chat"])
 
-    # -----------------------------------
-    # CHAT FUNCTIONS
-    # -----------------------------------
-    def send_message(self):
-        text = self.user_input.get().strip()
-        if not text:
-            return
+        # seed greeting
+        self.chat_box.config(state="normal")
+        self.chat_box.insert(tk.END, "── Session started ──\n\n", "sys")
+        self.chat_box.insert(tk.END, "Assistant\n", "bot_lbl")
+        self.chat_box.insert(tk.END, "Hi — how can I help you today?\n\n", "bot_msg")
+        self.chat_box.config(state="disabled")
 
-        self.append_chat("You", text)
-        self.user_input.delete(0, tk.END)
+    # ─────────────────────────────────────────
+    #  CHAT LOGIC  (functionality unchanged)
+    # ─────────────────────────────────────────
+    def _send(self):
+        self.submit_text_Meghana()
 
-        module = self.module_var.get()
-        gr = "ON" if self.guardrail_var.get() else "OFF"
-
-        response = f"[Module: {module} | Guardrails {gr}]\nProcessed: {text}"
-        self.append_chat("Assistant", response)
-    # -----------------------------------
-    # Meghana
-    # -----------------------------------
     def submit_text_Meghana(self):
         raw_text = self.user_input.get().strip()
-
-        if not raw_text:
-            self.status_label.config(text="⚠ Please enter text.")
+        if not raw_text or raw_text == self._ph:
+            self.status_label.config(text="⚠ Please enter text.", fg=CLR["warning"])
             return
 
-    # Show user message (RIGHT side)
         self.append_chat("You", raw_text)
         self.user_input.delete(0, tk.END)
 
         try:
-        # Call intent agent
             intent, assistant_response = agent.classify_intent(raw_text)
-
-        # Update labels
-            self.intent_label.config(text=f"Detected Intent: {intent}")
-            self.status_label.config(text="✅ Response generated")
-
-        # 🔥 SHOW ASSISTANT RESPONSE (LEFT side)
+            self.intent_label.config(text=f"Intent: {intent}")
+            self.status_label.config(text="● Response generated", fg=CLR["success"])
             self.append_chat("Assistant", assistant_response)
-
         except Exception as e:
-            self.status_label.config(text=f"❌ UI Error: {e}")
+            self.status_label.config(text="❌ Error", fg=CLR["error"])
             self.append_chat("Assistant", f"❌ Error: {e}")
 
-    # -----------------------------------
-    # End Meghana
-    # -----------------------------------
     def append_chat(self, role, message):
         self.chat_box.config(state="normal")
-
         if role == "You":
-            self.chat_box.insert(
-                tk.END,
-                f"You: {message}\n\n",
-                "user_msg"
-            )
+            self.chat_box.insert(tk.END, "You\n",          "you_lbl")
+            self.chat_box.insert(tk.END, f"{message}\n\n", "you_msg")
         else:
-            self.chat_box.insert(
-                tk.END,
-                f"{role}: {message}\n\n",
-                "assistant_msg"
-            )
-
+            self.chat_box.insert(tk.END, "Assistant\n",    "bot_lbl")
+            self.chat_box.insert(tk.END, f"{message}\n\n", "bot_msg")
         self.chat_box.config(state="disabled")
         self.chat_box.yview(tk.END)
 
 
-# ------------------------------
-# FUNCTIONS TO OPEN SCREENS
-# ------------------------------
-def open_mysql_pg_screen():
-    create_ui(tk.Toplevel())
-
+# ─────────────────────────────────────────────
+#  SCREEN LAUNCHERS  (unchanged)
+# ─────────────────────────────────────────────
+def open_mysql_pg_screen():        create_ui(tk.Toplevel())
 def open_overalldata_screen():
-    root = tk.Toplevel()
-    app = GRCUISkeleton(root)
-    
+    root = tk.Toplevel(); GRCUISkeleton(root)
 def execute_rag():
-    root = tk.Toplevel()
-    app = MainUI(root)
-
-def open_guardrails_screen():
-    open_process_screen(tk.Toplevel())
-
-def Create_Control_Screen():
-    create_control(tk.Toplevel())    
-    
-def prompt_Template_Screen():
-    prompt_Template(tk.Toplevel())
-
-def View_Process_Screen():
-    open_view_process_screen(tk.Toplevel())
-
-def Create_Risk_Screen():
-    risk(tk.Toplevel())
-
-def Create_SubProcess():
-    create_subporcess(tk.Toplevel())
-
-def open_main_bedrock_guardrail():
-    open_guardrail_window(tk.Toplevel())
-
+    root = tk.Toplevel(); MainUI(root)
+def open_guardrails_screen():      open_process_screen(tk.Toplevel())
+def Create_Control_Screen():       create_control(tk.Toplevel())
+def prompt_Template_Screen():      prompt_Template(tk.Toplevel())
+def View_Process_Screen():         open_view_process_screen(tk.Toplevel())
+def Create_Risk_Screen():          risk(tk.Toplevel())
+def Create_SubProcess():           create_subporcess(tk.Toplevel())
+def open_main_bedrock_guardrail(): open_guardrail_window(tk.Toplevel())
 def Test_Execution():
-    root = tk.Toplevel()
-    app = ControlReportGUI(root)
-#    root = tk.Toplevel()
-#   app = ControlExecutionGUI(root)
+    root = tk.Toplevel(); ControlReportGUI(root)
 
-# ------------------------------
-# MAIN FORM WITH MENU + WORKSPACE
-# ------------------------------
+
+# ─────────────────────────────────────────────
+#  MAIN FORM
+# ─────────────────────────────────────────────
 def start_main_form():
     root = tk.Tk()
     root.title("GRC_360")
-    root.geometry("900x550")
+    root.geometry("900x560")        # slightly taller to give menu bar room
+    root.minsize(800, 500)          # prevent squashing
+    root.configure(bg=CLR["app_bg"])
 
-    # Menu bar
-    menubar = Menu(root)
+    # light menu bar
+    menubar = Menu(root, bg="#FFFFFF", fg="#1E293B",
+                   activebackground=CLR["accent"], activeforeground="#FFFFFF",
+                   relief="flat", bd=0)
 
-    # Sirisha menu
-    sirisha_menu = Menu(menubar, tearoff=0)
-    sirisha_menu.add_command(label="MySQL & PostgreSQL", command=open_mysql_pg_screen)
-    menubar.add_cascade(label="Sirisha", menu=sirisha_menu)
+    def make_menu(label, items):
+        m = Menu(menubar, tearoff=0, bg="#FFFFFF", fg="#1E293B",
+                 activebackground=CLR["accent"], activeforeground="#FFFFFF",
+                 relief="flat", bd=1)
+        for lbl, cmd in items:
+            m.add_command(label=lbl, command=cmd)
+        menubar.add_cascade(label=label, menu=m)
 
-    # Meghana menu
-    meghana_menu = Menu(menubar, tearoff=0)
-    meghana_menu.add_command(label="View Overall Data", command=open_overalldata_screen)
-    menubar.add_cascade(label="Data", menu=meghana_menu)
-
-    # Swetha menu
-    swetha_menu = Menu(menubar, tearoff=0)
-    swetha_menu.add_command(label="Bedrock Health Check Screen", command=execute_rag)
-    swetha_menu.add_command(label="Main Bedrock Gaudrail Testing",command=open_main_bedrock_guardrail)
-    menubar.add_cascade(label="Swetha", menu=swetha_menu)
-
-    # Process menu
-    grc_process_menu = Menu(menubar, tearoff=0)
-    grc_process_menu.add_command(label="Create Process", command=prompt_Template_Screen)
-    grc_process_menu.add_command(label="View Process", command=View_Process_Screen)
-    menubar.add_cascade(label="Process", menu=grc_process_menu)
-
-    # Risk menu
-    risk_menu = Menu(menubar, tearoff=0)
-    risk_menu.add_command(label="Create Risk", command=Create_Risk_Screen)
-    risk_menu.add_command(label="View Risk", command=View_Process_Screen)
-    menubar.add_cascade(label="Risk", menu=risk_menu)
-
-    # Control menu
-    control_menu = Menu(menubar, tearoff=0)
-    control_menu.add_command(label="Create Control", command=Create_Control_Screen)
-    menubar.add_cascade(label="Control", menu=control_menu)
-
-    # Audit menu
-    aduit_menu = Menu(menubar, tearoff=0)
-    aduit_menu.add_command(label="Test Execution", command=Test_Execution)
-    menubar.add_cascade(label="Test", menu=aduit_menu)
-
-    # Control menu
-    subprocess_menu = Menu(menubar, tearoff=0)
-    subprocess_menu.add_command(label="Create Subprocess", command=Create_SubProcess)
-    menubar.add_cascade(label="Sub Process", menu=subprocess_menu)
-
-    # -----------------------------
-    # Process1 Menu
-    # -----------------------------
-    #process1_menu = Menu(menubar, tearoff=0)
-    #menubar.add_cascade(label="Process1", menu=process1_menu)
-
-    #process1_menu.add_command(label="Create Process")
-
-    # -----------------------------
-    # Sub Process Menu (inside Process1)
-    # ----------------------------- 
-    #subprocess_menu = Menu(process1_menu, tearoff=0)
-    #process1_menu.add_cascade(label="Sub Process", menu=subprocess_menu)
-
-    #subprocess_menu.add_command(label="SubProcess1")
-    #subprocess_menu.add_command(label="SubProcess2")
-    
+    make_menu("Sirisha",     [("MySQL & PostgreSQL",             open_mysql_pg_screen)])
+    make_menu("Data",        [("View Overall Data",              open_overalldata_screen)])
+    make_menu("Swetha",      [("Bedrock Health Check Screen",    execute_rag),
+                               ("Main Bedrock Guardrail Testing", open_main_bedrock_guardrail)])
+    make_menu("Process",     [("Create Process",                 prompt_Template_Screen),
+                               ("View Process",                   View_Process_Screen)])
+    make_menu("Risk",        [("Create Risk",                    Create_Risk_Screen),
+                               ("View Risk",                      View_Process_Screen)])
+    make_menu("Control",     [("Create Control",                 Create_Control_Screen)])
+    make_menu("Test",        [("Test Execution",                 Test_Execution)])
+    make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess)])
 
     root.config(menu=menubar)
 
-    # ----------------------------
-    # WORKING SPACE FRAME
-    # ----------------------------
-    workspace = tk.Frame(root, bg="#E8EBEF")
+    # workspace fills everything below the menu bar automatically
+    workspace = tk.Frame(root, bg=CLR["app_bg"])
     workspace.pack(fill="both", expand=True)
 
-    # Load AI Assistant inside workspace
     GRC360ChatModel(workspace)
-
     root.mainloop()
