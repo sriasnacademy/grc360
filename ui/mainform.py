@@ -12,7 +12,7 @@ from ui.control_report_gui import ControlReportGUI
 from ui.rag_bulk_ui import MainUI
 from ui.overalldata import GRCUISkeleton
 from ui.main_bedrock_guardrail_ui import open_guardrail_window
-
+from services.email_service import send_stage_notification
 agent = IntentAgent()
 
 # ─────────────────────────────────────────────
@@ -404,6 +404,9 @@ def open_main_bedrock_guardrail(): open_guardrail_window(tk.Toplevel())
 def Test_Execution():
     root = tk.Toplevel(); ControlReportGUI(root)
 
+def send_email():
+    send_stage_notification("ssmiley120@gmail.com","Something",1,"First","NONE")
+
 
 # ─────────────────────────────────────────────
 #  MAIN FORM
@@ -431,7 +434,8 @@ def start_main_form():
     make_menu("Sirisha",     [("MySQL & PostgreSQL",             open_mysql_pg_screen)])
     make_menu("Data",        [("View Overall Data",              open_overalldata_screen)])
     make_menu("Swetha",      [("Bedrock Health Check Screen",    execute_rag),
-                               ("Main Bedrock Guardrail Testing", open_main_bedrock_guardrail)])
+                               ("Main Bedrock Guardrail Testing", open_main_bedrock_guardrail),
+                               ("Mail Service", send_email)])
     make_menu("Process",     [("Create Process",                 prompt_Template_Screen),
                                ("View Process",                   View_Process_Screen)])
     make_menu("Risk",        [("Create Risk",                    Create_Risk_Screen),
