@@ -7,6 +7,7 @@ from engine.ai_evaluator import AIEvaluator
 from runners.report_runner import ControlReportRunner
 from workflow.engine import WorkflowEngine
 from workflow.event_dispatcher import WorkflowEventDispatcher
+from connectors.lambda_mysql import call_lambda
 
 
 class ControlExecutionRunner:
@@ -22,8 +23,9 @@ class ControlExecutionRunner:
 
         plan = report_svc.fetch_test_plan_with_control(test_plan_id)[0]
 
-        control_failed = False
         failed_task_ids = []
+        
+        cycle_id, cycle_number = self.start_new_cycle(test_plan_id)
 
         # =====================================================
         # EXECUTE EACH STEP
@@ -38,18 +40,21 @@ class ControlExecutionRunner:
                 step["control_assertion"],
                 tasks
             )
+            
+            
 
             # 3️⃣ Persist task results
             result_svc.store_task_results(
                 evaluated["tasks"],
                 test_plan_id,
-                plan["control_id"]
+                plan["control_id"],
+                cycle_number
             )
+            
+            
 
             # 4️⃣ Track failures
             if evaluated["status"] == "FAIL":
-                control_failed = True
-
                 for task in evaluated["tasks"]:
                     if task["status"] == "FAIL":
                         failed_task_ids.append(task["test_task_id"])
@@ -61,6 +66,7 @@ class ControlExecutionRunner:
                             task_id=task["test_task_id"],
                             control_id=plan["control_id"],
                             test_plan_id=test_plan_id,
+                            test_step_id = task["test_step_id"]
                         )
                         
                         engine = WorkflowEngine()
@@ -80,3 +86,22 @@ class ControlExecutionRunner:
         # GENERATE REPORT FROM DB
         # =====================================================
         return ControlReportRunner().generate_control_report(test_plan_id)
+
+    def start_new_cycle(self,test_plan_id):
+        # Get next cycle number
+        results = call_lambda({
+            "action": "raw_sql",
+            "sql": "SELECT COUNT(*) FROM test_cycle WHERE test_plan_id = %s",
+            "params": [test_plan_id]   # list is correct
+        })
+        records = results.get("records",[])
+        cycle_number = records[0]["COUNT(*)"] + 1
+
+        # Insert new cycle
+        test_cycle_results = call_lambda({
+            "action": "raw_sql",
+            "sql": " INSERT INTO `test_cycle`(`test_plan_id`,`cycle_number`,`run_by`,`run_at`,`active`)VALUES (%s,%s,%s,now(),1)",
+            "params": [test_plan_id,cycle_number,"siri"]   # list is correct
+        })
+        cycle_id = test_cycle_results.get("inserted_id")
+        return cycle_id, cycle_number
