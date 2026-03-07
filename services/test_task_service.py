@@ -12,7 +12,7 @@ class TestTaskService:
         test_step_id = test_step.get("test_step_id")
         payload = {
             "action": "raw_sql",
-            "sql": " SELECT t.* FROM test_tasks t JOIN teststep_testtask_map m ON t.test_task_id = m.test_task_id WHERE m.test_step_id = %s ORDER BY m.execution_order ",
+            "sql": " SELECT t.*,test_step_id FROM test_tasks t JOIN teststep_testtask_map m ON t.test_task_id = m.test_task_id WHERE m.test_step_id = %s ORDER BY m.execution_order ",
             "params": [test_step_id]   # list is correct
         }
 
@@ -57,7 +57,7 @@ class TestTaskService:
 
                 results.append({
                     "test_task_id": test_task_id,
-                    "task_name": task_name,
+                    "task_name": task_name, 
                     "evidence": evidence_records,
                     "evidence_records_from_table": r.get("evaluation_rule")   # <-- AI uses this
                 })
