@@ -1,5 +1,6 @@
 import json
 import boto3
+from connectors import mysqldb_engine
 # ----------------------------
 # AWS Lambda Info
 # ----------------------------
@@ -27,21 +28,23 @@ def get_lambda_client():
 # Call Lambda function
 # ----------------------------
 def call_lambda(payload):
-    lambda_client = get_lambda_client()
+    lambda_client = mysqldb_engine.lambda_handler(payload,"")
     try:
-        response = lambda_client.invoke(
-            FunctionName=LAMBDA_NAME,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(payload)
-        )
+       
 
-        raw = response["Payload"].read().decode("utf-8")
-        data = json.loads(raw)
+        # raw = lambda_client["records"]
+        # data = json.loads(raw)
 
-        if data.get("statusCode") != 200:
-            raise Exception(data.get("body"))
+        # if data.get("statusCode") != 200:
+        #     raise Exception(data.get("body"))
 
-        return json.loads(data["body"])
+        # return json.loads(data["body"])
+
+        response_data = json.loads(lambda_client['body'])
+    
+        records = response_data.get("records", [])
+    
+        return response_data
 
     except Exception as e:
         raise RuntimeError(f"❌ Lambda invocation failed: {str(e)}")
