@@ -116,19 +116,20 @@ PASS: <reason> OR FAIL: <reason>
 """
 
         out = self.llm.generate(prompt)
-        line = next(l for l in out.splitlines() if l.strip())
+
+        if not out or not out.strip():
+            return {"status": "FAIL", "reason": "LLM returned empty response"}
+
+        line = next((l for l in out.splitlines() if l.strip()), None)
+
+        if not line:
+            return {"status": "FAIL", "reason": "LLM response had no readable content"}
+
+        if ":" not in line:
+            return {"status": "FAIL", "reason": f"LLM response format unexpected: {line}"}
 
         status = "FAIL" if line.upper().startswith("FAIL") else "PASS"
         return {
             "status": status,
             "reason": line.split(":", 1)[1].strip(),
         }
-
-    # =====================================================
-    # HELPERS
-    # =====================================================
-    def _pass(self, reason):
-        return {"decided": True, "status": "PASS", "reason": reason}
-
-    def _fail(self, reason):
-        return {"decided": True, "status": "FAIL", "reason": reason}
