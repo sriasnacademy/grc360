@@ -20,7 +20,7 @@ def fetch_control_template(intent):
 
 def normalize_control_data(data: dict):
     if not data:
-        return None
+        return  
 
     for key in ["control_name", "description", "control_type", "control_category"]:
         if key in data and isinstance(data[key], str):
@@ -137,10 +137,10 @@ Return ONLY valid JSON.
 No explanation.
 """
 
-        # 2) Check final prompt sent to model
-        prompt_check = _run_guardrail_check(prompt, source="INPUT", stage="prompt")
-        if not prompt_check["allowed"]:
-            return prompt_check["message"]
+        # # 2) Check final prompt sent to model
+        # prompt_check = _run_guardrail_check(prompt, source="INPUT", stage="prompt")
+        # if not prompt_check["allowed"]:
+        #     return prompt_check["message"]
 
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
@@ -151,10 +151,10 @@ No explanation.
         raw_output = response.choices[0].message.content
         print("RAW Control RESPONSE:", repr(raw_output))
 
-        # 3) Check model output
-        output_check = _run_guardrail_check(raw_output, source="OUTPUT", stage="LLM response")
-        if not output_check["allowed"]:
-            return output_check["message"]
+        # # 3) Check model output
+        # output_check = _run_guardrail_check(raw_output, source="OUTPUT", stage="LLM response")
+        # if not output_check["allowed"]:
+        #     return output_check["message"]
 
         parsed_data = safe_json_parse(raw_output)
         if not parsed_data:
