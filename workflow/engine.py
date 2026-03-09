@@ -1,4 +1,5 @@
 from workflow.instance_manager import WorkflowInstanceManager
+from connectors.lambda_mysql import call_lambda
 
 
 class WorkflowEngine:
@@ -65,7 +66,7 @@ class WorkflowEngine:
             return None
         print(f"✅ Workflow instance created: instance_id={instance_id}")
 
-        # 6. Log initial history entry
+        # 6. Log initial history entry — Row 1
         self.instance_manager.log_history(
             instance_id=instance_id,
             workflow_id=workflow["workflow_id"],
@@ -75,8 +76,80 @@ class WorkflowEngine:
             performed_by=payload.get("performed_by", "SYSTEM"),
             remarks=f"Workflow '{workflow['workflow_name']}' started for ref:{payload['reference_id']}"
         )
+        print(f"📝 History Row 1 logged: WORKFLOW_STARTED → {initial_stage['stage_name']}")
+
+        # 7. Auto assign owner role — logs Row 2
+        self.assign_owner(
+            instance_id=instance_id,
+            reference_id=payload["reference_id"],
+            workflow_id=workflow["workflow_id"],
+            assigned_by=payload.get("performed_by", "SYSTEM")
+        )
 
         return instance_id
+
+    # ─────────────────────────────────────────────
+    # ASSIGN OWNER
+    # ─────────────────────────────────────────────
+
+    def assign_owner(self, instance_id, reference_id, workflow_id, assigned_by):
+        """
+        Automatically called after workflow starts.
+        1. Looks up role_required from workflow_transitions for assign_owner action
+        2. Updates issues table with that role
+        3. Transitions workflow to Assign Owner stage → logs Row 2 in workflow_history
+        """
+
+        # 1. Get role from workflow_transitions for assign_owner action
+        role_payload = {
+            "action": "raw_sql",
+            "sql": """SELECT role_required 
+                      FROM workflow_transitions 
+                      WHERE workflow_id = %s 
+                      AND action_name = 'assign_owner' 
+                      AND active = 1 
+                      LIMIT 1""",
+            "params": [workflow_id]
+        }
+        try:
+            response = call_lambda(role_payload)
+            records = response.get("records", [])
+            if not records:
+                print("❌ No role found for assign_owner transition")
+                return False
+            role = records[0]["role_required"]
+            print(f"👤 Role found for assignment: {role}")
+        except Exception as e:
+            print(f"❌ Lambda Fetch Error (assign_owner - get role): {e}")
+            return False
+
+        # 2. Update issues table with role
+        update_payload = {
+            "action": "raw_sql",
+            "sql": """UPDATE issues 
+                      SET assigned_to = %s, assigned_by = %s, assigned_at = NOW() 
+                      WHERE issue_id = %s""",
+            "params": [role, assigned_by, reference_id]
+        }
+        try:
+            call_lambda(update_payload)
+            print(f"✅ issues.assigned_to = '{role}' for issue_id={reference_id}")
+        except Exception as e:
+            print(f"❌ Lambda Fetch Error (assign_owner - update issues): {e}")
+            return False
+
+        # 3. Transition workflow stage → this logs Row 2 in workflow_history
+        success = self.perform_action(
+            instance_id=instance_id,
+            action_name="assign_owner",
+            performed_by=assigned_by,
+            remarks=f"Owner role assigned: {role}"
+        )
+
+        if success:
+            print(f"📝 History Row 2 logged: Issue Created → Assign Owner")
+
+        return success
 
     # ─────────────────────────────────────────────
     # TRANSITION STAGE

@@ -125,6 +125,21 @@ class WorkflowInstanceManager:
             print("❌ Lambda Fetch Error (get_available_transitions):", e)
         return []
 
+    def get_workflow_id_for_instance(self, instance_id):
+        """Fetches workflow_id from workflow_instance for a given instance_id."""
+        payload = {
+            "action": "raw_sql",
+            "sql": "SELECT workflow_id FROM workflow_instance WHERE instance_id = %s",
+            "params": [instance_id]
+        }
+        try:
+            response = call_lambda(payload)
+            records = response.get("records", [])
+            return records[0]["workflow_id"] if records else None
+        except Exception as e:
+            print("❌ Lambda Fetch Error (get_workflow_id_for_instance):", e)
+        return None
+
     def transition_stage(self, instance_id, action_name, performed_by, remarks=None):
         # 1. Get current stage
         current_stage = self.get_current_stage(instance_id)
@@ -153,10 +168,13 @@ class WorkflowInstanceManager:
             print("❌ Lambda Fetch Error (transition_stage - update):", e)
             return False
 
-        # 4. Log to workflow_history
+        # 4. Fetch workflow_id for history log
+        workflow_id = self.get_workflow_id_for_instance(instance_id)
+
+        # 5. Log to workflow_history — now with correct workflow_id
         self.log_history(
             instance_id=instance_id,
-            workflow_id=None,  # fetched internally if needed
+            workflow_id=workflow_id,
             from_stage_id=current_stage["stage_id"],
             to_stage_id=to_stage_id,
             action=action_name,
@@ -164,7 +182,7 @@ class WorkflowInstanceManager:
             remarks=remarks
         )
 
-        # 5. Check if terminal stage — close the instance
+        # 6. Check if terminal stage — close the instance
         if transition.get("is_terminal") or self._is_terminal_stage(to_stage_id):
             self._complete_instance(instance_id)
             print(f"✅ Workflow instance {instance_id} completed.")
