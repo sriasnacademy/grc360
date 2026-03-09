@@ -56,6 +56,7 @@ class TestTaskService:
                 evidence_records = evidence_response.get("records", [])
 
                 results.append({
+                    "test_step_id": test_step_id,
                     "test_task_id": test_task_id,
                     "task_name": task_name, 
                     "evidence": evidence_records,
