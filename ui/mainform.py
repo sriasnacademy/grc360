@@ -443,7 +443,8 @@ def start_main_form():
     make_menu("Control",     [("Create Control",                 Create_Control_Screen)])
     make_menu("Test",        [("Test Execution",                 Test_Execution)])
     make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess)])
-
+    make_menu("Workflow", [("Approve Issue",              Create_SubProcess),
+                           ("Fix Issue", Create_SubProcess)])
     root.config(menu=menubar)
 
     # workspace fills everything below the menu bar automatically
