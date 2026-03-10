@@ -13,6 +13,7 @@ from ui.rag_bulk_ui import MainUI
 from ui.overalldata import GRCUISkeleton
 from ui.main_bedrock_guardrail_ui import open_guardrail_window
 from services.email_service import send_stage_notification
+from ui.accept_issue import AcceptIssueScreen
 agent = IntentAgent()
 
 # ─────────────────────────────────────────────
@@ -403,6 +404,9 @@ def Create_SubProcess():           create_subporcess(tk.Toplevel())
 def open_main_bedrock_guardrail(): open_guardrail_window(tk.Toplevel())
 def Test_Execution():
     root = tk.Toplevel(); ControlReportGUI(root)
+    
+def Accpet_Issue():
+    root = tk.Toplevel(); AcceptIssueScreen(root,"MANAGER","siri123")
 
 def send_email():
     send_stage_notification("ssmiley120@gmail.com","Something",1,"First","NONE")
@@ -443,7 +447,7 @@ def start_main_form():
     make_menu("Control",     [("Create Control",                 Create_Control_Screen)])
     make_menu("Test",        [("Test Execution",                 Test_Execution)])
     make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess)])
-    make_menu("Workflow", [("Approve Issue",              Create_SubProcess),
+    make_menu("Workflow", [("Accept Issue",              Accpet_Issue),
                            ("Fix Issue", Create_SubProcess)])
     root.config(menu=menubar)
 
