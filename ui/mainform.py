@@ -13,7 +13,8 @@ from ui.rag_bulk_ui import MainUI
 from ui.overalldata import GRCUISkeleton
 from ui.main_bedrock_guardrail_ui import open_guardrail_window
 from services.email_service import send_stage_notification
-from ui.accept_issue import AcceptIssueScreen
+from process_dashboard import open_process_dashboard          # ← NEW
+
 agent = IntentAgent()
 
 # ─────────────────────────────────────────────
@@ -161,8 +162,8 @@ class GRC360ChatModel:
         #  SIDEBAR — fixed width, full height via pack
         # ══════════════════════════════════════
         sidebar = tk.Frame(workspace, bg=CLR["sidebar_bg"], width=SIDEBAR_W)
-        sidebar.pack(side="left", fill="y")          # ← fill="y" stretches full height
-        sidebar.pack_propagate(False)                # ← respect fixed width
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
         # accent stripe
         tk.Frame(sidebar, bg=CLR["sidebar_accent"], width=4).pack(side="left", fill="y")
@@ -200,6 +201,18 @@ class GRC360ChatModel:
                    "Mitigate identified risks",
                    Create_Control_Screen).pack(fill="x", padx=10, pady=3)
 
+        # ── NEW: Process Dashboard shortcut card ──────────────
+        tk.Frame(body, bg=CLR["card_border"], height=1).pack(
+            fill="x", padx=14, pady=(10, 6))
+        tk.Label(body, text="📊  REPORTS",
+                 bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"],
+                 font=FT["section"]).pack(anchor="w", padx=14, pady=(0, 6))
+
+        ActionCard(body, "📈", "Process Dashboard",
+                   "Live metrics & process table",
+                   Process_Dashboard_Screen).pack(fill="x", padx=10, pady=3)
+        # ──────────────────────────────────────────────────────
+
         # status at bottom
         self.intent_label = tk.Label(
             body, text="Intent: —",
@@ -215,7 +228,7 @@ class GRC360ChatModel:
         #  CHAT PANEL — fills remaining space
         # ══════════════════════════════════════
         chat_panel = tk.Frame(workspace, bg=CLR["msg_bg"])
-        chat_panel.pack(side="left", fill="both", expand=True)  # ← expand fills width & height
+        chat_panel.pack(side="left", fill="both", expand=True)
 
         # ── Header ────────────────────────────
         header = tk.Frame(chat_panel, bg=CLR["header_bg"], height=52)
@@ -245,11 +258,11 @@ class GRC360ChatModel:
 
         tk.Frame(chat_panel, bg=CLR["header_border"], height=1).pack(fill="x")
 
-        # ── Input bar (pack BEFORE message area so it anchors to bottom) ──
+        # ── Input bar ──
         tk.Frame(chat_panel, bg=CLR["divider"], height=1).pack(fill="x", side="bottom")
 
         input_bar = tk.Frame(chat_panel, bg=CLR["input_bar_bg"], height=58)
-        input_bar.pack(fill="x", side="bottom")      # ← anchored to bottom
+        input_bar.pack(fill="x", side="bottom")
         input_bar.pack_propagate(False)
 
         self.user_input = tk.Entry(
@@ -268,7 +281,6 @@ class GRC360ChatModel:
                              padx=(14, 8), pady=10, ipady=3)
         self.user_input.bind("<Return>", lambda e: self._send())
 
-        # placeholder
         self._ph = "Type your message here…"
         self.user_input.insert(0, self._ph)
         self.user_input.config(fg=CLR["placeholder"])
@@ -302,9 +314,9 @@ class GRC360ChatModel:
             command=self._send,
         ).pack(side="right", padx=(0, 14), pady=10)
 
-        # ── Message area (fills the remaining middle space) ───
+        # ── Message area ──
         msg_wrap = tk.Frame(chat_panel, bg=CLR["msg_bg"])
-        msg_wrap.pack(fill="both", expand=True)      # ← takes all remaining height
+        msg_wrap.pack(fill="both", expand=True)
 
         self.chat_box = tk.Text(
             msg_wrap,
@@ -352,7 +364,7 @@ class GRC360ChatModel:
         self.chat_box.config(state="disabled")
 
     # ─────────────────────────────────────────
-    #  CHAT LOGIC  (functionality unchanged)
+    #  CHAT LOGIC
     # ─────────────────────────────────────────
     def _send(self):
         self.submit_text_Meghana()
@@ -388,7 +400,7 @@ class GRC360ChatModel:
 
 
 # ─────────────────────────────────────────────
-#  SCREEN LAUNCHERS  (unchanged)
+#  SCREEN LAUNCHERS
 # ─────────────────────────────────────────────
 def open_mysql_pg_screen():        create_ui(tk.Toplevel())
 def open_overalldata_screen():
@@ -404,12 +416,13 @@ def Create_SubProcess():           create_subporcess(tk.Toplevel())
 def open_main_bedrock_guardrail(): open_guardrail_window(tk.Toplevel())
 def Test_Execution():
     root = tk.Toplevel(); ControlReportGUI(root)
-    
-def Accpet_Issue():
-    root = tk.Toplevel(); AcceptIssueScreen(root,"MANAGER","siri123")
-
 def send_email():
-    send_stage_notification("ssmiley120@gmail.com","Something",1,"First","NONE")
+    send_stage_notification("ssmiley120@gmail.com", "Something", 1, "First", "NONE")
+
+# ── NEW launcher ──────────────────────────────
+def Process_Dashboard_Screen():
+    open_process_dashboard(tk.Toplevel())
+# ─────────────────────────────────────────────
 
 
 # ─────────────────────────────────────────────
@@ -418,11 +431,10 @@ def send_email():
 def start_main_form():
     root = tk.Tk()
     root.title("GRC_360")
-    root.geometry("900x560")        # slightly taller to give menu bar room
-    root.minsize(800, 500)          # prevent squashing
+    root.geometry("900x560")
+    root.minsize(800, 500)
     root.configure(bg=CLR["app_bg"])
 
-    # light menu bar
     menubar = Menu(root, bg="#FFFFFF", fg="#1E293B",
                    activebackground=CLR["accent"], activeforeground="#FFFFFF",
                    relief="flat", bd=0)
@@ -439,19 +451,23 @@ def start_main_form():
     make_menu("Data",        [("View Overall Data",              open_overalldata_screen)])
     make_menu("Swetha",      [("Bedrock Health Check Screen",    execute_rag),
                                ("Main Bedrock Guardrail Testing", open_main_bedrock_guardrail),
-                               ("Mail Service", send_email)])
+                               ("Mail Service",                   send_email)])
+
+    # ── Process menu now has 3 items ──────────────────────────
     make_menu("Process",     [("Create Process",                 prompt_Template_Screen),
-                               ("View Process",                   View_Process_Screen)])
+                               ("View Process",                   View_Process_Screen),
+                               ("Process Dashboard",              Process_Dashboard_Screen)])  # ← NEW
+    # ──────────────────────────────────────────────────────────
+
     make_menu("Risk",        [("Create Risk",                    Create_Risk_Screen),
                                ("View Risk",                      View_Process_Screen)])
     make_menu("Control",     [("Create Control",                 Create_Control_Screen)])
     make_menu("Test",        [("Test Execution",                 Test_Execution)])
     make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess)])
-    make_menu("Workflow", [("Accept Issue",              Accpet_Issue),
-                           ("Fix Issue", Create_SubProcess)])
+    make_menu("Workflow",    [("Approve Issue",                  Create_SubProcess),
+                               ("Fix Issue",                      Create_SubProcess)])
     root.config(menu=menubar)
 
-    # workspace fills everything below the menu bar automatically
     workspace = tk.Frame(root, bg=CLR["app_bg"])
     workspace.pack(fill="both", expand=True)
 
