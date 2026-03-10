@@ -240,5 +240,7 @@ presidio-analyzer
 presidio-anonymizer
 sentence-transformers
 detoxify
+pymysql
+
 
 #Meghana
