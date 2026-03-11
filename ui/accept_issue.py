@@ -1,4 +1,4 @@
-# ui/accept_issue_screen.py
+# ui/accept_issue.py
 import tkinter as tk
 from tkinter import ttk, messagebox
 from connectors.lambda_mysql import call_lambda
@@ -12,22 +12,18 @@ class AcceptIssueScreen:
         self.current_user = current_user
         self.on_accept_callback = on_accept_callback
 
-        self.window = tk.Toplevel(parent)
+        # ✅ Use the parent directly — no Toplevel created here
+        self.window = parent
         self.window.title("Accept Issues")
         self.window.geometry("900x560")
         self.window.configure(bg="#F4F6F9")
         self.window.resizable(True, True)
-        self.window.grab_set()
 
+        self._instance_map = {}
         self._build_ui()
         self._load_issues()
 
-    # ─────────────────────────────────────────────
-    # UI CONSTRUCTION
-    # ─────────────────────────────────────────────
-
     def _build_ui(self):
-        # ── Header
         header = tk.Frame(self.window, bg="#1E3A5F", height=55)
         header.pack(fill="x")
         header.pack_propagate(False)
@@ -44,7 +40,6 @@ class AcceptIssueScreen:
             fg="#A8C4E0", bg="#1E3A5F"
         ).pack(side="right", padx=20, pady=12)
 
-        # ── Info bar
         info = tk.Frame(self.window, bg="#EAF2FB", height=32)
         info.pack(fill="x")
         info.pack_propagate(False)
@@ -54,7 +49,6 @@ class AcceptIssueScreen:
             font=("Segoe UI", 9), fg="#1E3A5F", bg="#EAF2FB"
         ).pack(side="left", padx=16, pady=6)
 
-        # ── Refresh button
         btn_frame = tk.Frame(self.window, bg="#F4F6F9")
         btn_frame.pack(fill="x", padx=16, pady=(10, 4))
 
@@ -70,27 +64,24 @@ class AcceptIssueScreen:
             font=("Segoe UI", 10, "bold"), fg="#1E3A5F", bg="#F4F6F9"
         ).pack(side="left")
 
-        # ── Table
         table_frame = tk.Frame(self.window, bg="#F4F6F9")
         table_frame.pack(fill="both", expand=True, padx=16, pady=(0, 8))
 
-        columns = ("issue_id", "title", "test_plan", "test_cycle", "assigned_to")
+        columns = ("issue_id", "type", "test_plan", "test_cycle", "assigned_to")
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=14)
 
-        # Column definitions
         self.tree.heading("issue_id",    text="Issue ID")
-        self.tree.heading("title",       text="Issue Title")
+        self.tree.heading("type",       text="Issue Title")
         self.tree.heading("test_plan",   text="Test Plan")
         self.tree.heading("test_cycle",  text="Test Cycle")
         self.tree.heading("assigned_to", text="Assigned To")
 
         self.tree.column("issue_id",    width=80,  anchor="center")
-        self.tree.column("title",       width=280, anchor="w")
+        self.tree.column("type",       width=280, anchor="w")
         self.tree.column("test_plan",   width=180, anchor="w")
         self.tree.column("test_cycle",  width=100, anchor="center")
         self.tree.column("assigned_to", width=140, anchor="center")
 
-        # Scrollbars
         vsb = ttk.Scrollbar(table_frame, orient="vertical",   command=self.tree.yview)
         hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -101,11 +92,9 @@ class AcceptIssueScreen:
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
 
-        # Row styling
         self.tree.tag_configure("odd",  background="#FFFFFF")
         self.tree.tag_configure("even", background="#F0F5FB")
 
-        # ── Bottom action bar
         action_bar = tk.Frame(self.window, bg="#E8EDF2", height=56)
         action_bar.pack(fill="x", side="bottom")
         action_bar.pack_propagate(False)
@@ -132,15 +121,9 @@ class AcceptIssueScreen:
         )
         self.accept_btn.pack(side="right", padx=4, pady=10)
 
-        # Bind selection
         self.tree.bind("<<TreeviewSelect>>", self._on_row_select)
 
-    # ─────────────────────────────────────────────
-    # DATA LOADING
-    # ─────────────────────────────────────────────
-
     def _load_issues(self):
-        """Load issues assigned to current user's role that are pending acceptance."""
         for row in self.tree.get_children():
             self.tree.delete(row)
 
@@ -153,8 +136,8 @@ class AcceptIssueScreen:
                 "sql": """
                     SELECT 
                         i.issue_id,
-                        i.issue_title,
-                        tp.plan_name      AS test_plan,
+                        i.issue_type,
+                        tp.test_plan_name      AS test_plan,
                         tc.cycle_number   AS test_cycle,
                         i.assigned_to,
                         wi.instance_id,
@@ -164,8 +147,8 @@ class AcceptIssueScreen:
                                               AND wi.module_name = 'ISSUE'
                                               AND wi.status = 'ACTIVE'
                     JOIN workflow_stages ws    ON ws.stage_id = wi.current_stage_id
-                    LEFT JOIN test_plans tp    ON tp.plan_id = i.plan_id
-                    LEFT JOIN test_cycle tc    ON tc.cycle_id = wi.cycle_id
+                    LEFT JOIN test_plan tp    ON tp.test_plan_id = i.test_plan_id
+                    LEFT JOIN test_cycle tc    ON tc.cycle_number = wi.cycle_id
                     WHERE i.assigned_to = %s
                     ORDER BY i.issue_id DESC
                 """,
@@ -178,21 +161,20 @@ class AcceptIssueScreen:
                 self.status_label.config(text="No issues assigned to your role.", fg="#888")
                 return
 
+            self._instance_map = {
+                str(rec["issue_id"]): rec["instance_id"]
+                for rec in records
+            }
+
             for i, rec in enumerate(records):
                 tag = "even" if i % 2 == 0 else "odd"
                 self.tree.insert("", "end", iid=str(rec["issue_id"]), tags=(tag,), values=(
                     rec["issue_id"],
-                    rec["issue_title"],
+                    rec["issue_type"],
                     rec.get("test_plan", "—"),
                     f"Cycle {rec.get('test_cycle', '—')}",
                     rec.get("assigned_to", "—"),
                 ))
-                # Store instance_id hidden per row
-                self.tree.set(str(rec["issue_id"]), "issue_id", rec["issue_id"])
-                self._instance_map = {
-                    str(rec["issue_id"]): rec["instance_id"]
-                    for rec in records
-                }
 
             self.status_label.config(
                 text=f"{len(records)} issue(s) found. Select one to accept.",
@@ -201,10 +183,6 @@ class AcceptIssueScreen:
 
         except Exception as e:
             self.status_label.config(text=f"❌ Error loading issues: {e}", fg="red")
-
-    # ─────────────────────────────────────────────
-    # EVENTS
-    # ─────────────────────────────────────────────
 
     def _on_row_select(self, event):
         selected = self.tree.selection()
@@ -221,9 +199,9 @@ class AcceptIssueScreen:
             messagebox.showwarning("No Selection", "Please select an issue to accept.", parent=self.window)
             return
 
-        issue_id = selected[0]
+        issue_id    = selected[0]
         instance_id = self._instance_map.get(str(issue_id))
-        vals = self.tree.item(issue_id, "values")
+        vals        = self.tree.item(issue_id, "values")
         issue_title = vals[1]
 
         confirm = messagebox.askyesno(
@@ -237,13 +215,7 @@ class AcceptIssueScreen:
         self._accept_issue(issue_id, instance_id)
 
     def _accept_issue(self, issue_id, instance_id):
-        """
-        1. Get next role from workflow_transitions for 'accept_issue' action
-        2. Update issues.assigned_to with next role
-        3. Transition workflow stage
-        """
         try:
-            # 1. Get next role from workflow_transitions
             role_payload = {
                 "action": "raw_sql",
                 "sql": """
@@ -253,14 +225,14 @@ class AcceptIssueScreen:
                                                 AND wi.workflow_id = wt.workflow_id
                     JOIN workflow_stages ws ON ws.stage_id = wt.to_stage_id
                     WHERE wi.instance_id = %s
-                    AND wt.action_name = 'accept_issue'
+                    AND wt.action_name = 'accept_and_assign_issue'
                     AND wt.active = 1
                     LIMIT 1
                 """,
                 "params": [instance_id]
             }
-            response = call_lambda(role_payload)
-            records = response.get("records", [])
+            response   = call_lambda(role_payload)
+            records    = response.get("records", [])
 
             if not records:
                 messagebox.showerror("Error", "No 'accept_issue' transition found for this stage.", parent=self.window)
@@ -269,49 +241,43 @@ class AcceptIssueScreen:
             next_role  = records[0]["role_required"]
             next_stage = records[0]["next_stage"]
 
-            # 2. Update issues.assigned_to with next role
-            update_payload = {
+            call_lambda({
                 "action": "raw_sql",
                 "sql": """UPDATE issues 
                           SET assigned_to = %s, assigned_by = %s, assigned_at = NOW()
                           WHERE issue_id = %s""",
                 "params": [next_role, self.current_user, issue_id]
-            }
-            call_lambda(update_payload)
+            })
 
-            # 3. Transition workflow stage + log history
-            transition_payload = {
+            t_response = call_lambda({
                 "action": "raw_sql",
                 "sql": """
                     SELECT wi.current_stage_id, wt.to_stage_id, wi.workflow_id
                     FROM workflow_instance wi
                     JOIN workflow_transitions wt ON wi.current_stage_id = wt.from_stage_id
                                                 AND wi.workflow_id = wt.workflow_id
-                    WHERE wi.instance_id = %s AND wt.action_name = 'accept_issue' AND wt.active = 1
+                    WHERE wi.instance_id = %s AND wt.action_name = 'accept_and_assign_issue' AND wt.active = 1
                     LIMIT 1
                 """,
                 "params": [instance_id]
-            }
-            t_response = call_lambda(transition_payload)
-            t_records  = t_response.get("records", [])
+            })
+            t_records = t_response.get("records", [])
 
             if t_records:
                 from_stage_id = t_records[0]["current_stage_id"]
                 to_stage_id   = t_records[0]["to_stage_id"]
                 workflow_id   = t_records[0]["workflow_id"]
 
-                # Update workflow_instance stage
                 call_lambda({
                     "action": "raw_sql",
                     "sql": "UPDATE workflow_instance SET current_stage_id = %s WHERE instance_id = %s",
                     "params": [to_stage_id, instance_id]
                 })
 
-                # Log workflow_history
                 call_lambda({
                     "action": "raw_sql",
                     "sql": """INSERT INTO workflow_history 
-                              (instance_id, workflow_id, from_stage_id, to_stage_id, 
+                              (instance_id, workflow_id, from_stage_id, to_stage_id,
                                action_performed, performed_by, remarks, performed_at)
                               VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())""",
                     "params": [
@@ -328,11 +294,9 @@ class AcceptIssueScreen:
                 parent=self.window
             )
 
-            # Callback to refresh parent if provided
             if self.on_accept_callback:
                 self.on_accept_callback()
 
-            # Refresh table
             self._load_issues()
 
         except Exception as e:
