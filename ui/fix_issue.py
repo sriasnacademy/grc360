@@ -394,7 +394,7 @@ class FixIssueScreen:
             info_response = call_lambda({
                 "action": "raw_sql",
                 "sql": """
-                    SELECT i.test_ plan_id, wi.cycle_id
+                    SELECT i.test_plan_id, wi.cycle_id
                     FROM issues i
                     JOIN workflow_instance wi ON wi.reference_id = i.issue_id
                                              AND wi.module_name  = 'ISSUE'
@@ -407,7 +407,7 @@ class FixIssueScreen:
             if not info_records:
                 return
 
-            plan_id  = info_records[0]["plan_id"]
+            plan_id  = info_records[0]["test_plan_id"]
             cycle_id = info_records[0]["cycle_id"]
 
             if not plan_id:
@@ -418,10 +418,10 @@ class FixIssueScreen:
                 "action": "raw_sql",
                 "sql": """
                     SELECT
-                        COUNT(*)                                        AS total,
-                        SUM(CASE WHEN i.issue_status = 'CLOSED' THEN 1 ELSE 0 END) AS closed
+                        COUNT(*) AS total,
+                        SUM(CASE WHEN i.status = 'CLOSED' THEN 1 ELSE 0 END) AS closed
                     FROM issues i
-                    WHERE i.plan_id = %s
+                    WHERE i.test_plan_id = %s
                 """,
                 "params": [plan_id]
             })
