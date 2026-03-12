@@ -13,26 +13,30 @@ from ui.rag_bulk_ui import MainUI
 from ui.overalldata import GRCUISkeleton
 from ui.main_bedrock_guardrail_ui import open_guardrail_window
 from services.email_service import send_stage_notification
-from ui.Dashboards.process_dashboard    import open_process_dashboard
-from ui.Dashboards.subprocess_dashboard import open_subprocess_dashboard
-from ui.Dashboards.control_dashboard    import open_control_dashboard
-from ui.Dashboards.risk_dashboard       import open_risk_dashboard
+from process_dashboard import open_process_dashboard     
+from ui.accept_issue import AcceptIssueScreen
+from ui.fix_issue import FixIssueScreen
+# ← NEW
 
 agent = IntentAgent()
 
 # ─────────────────────────────────────────────
-#  DESIGN TOKENS
+#  DESIGN TOKENS  — full light theme
 # ─────────────────────────────────────────────
 CLR = {
     "app_bg":         "#F0F4F8",
+    # sidebar (dark navy)
     "sidebar_bg":     "#1E2A3A",
     "sidebar_accent": "#2563EB",
     "card_bg":        "#253447",
     "card_hover":     "#2E3F56",
     "card_border":    "#344A63",
+    "tag_bg":         "#1A3254",
+    "tag_fg":         "#60A5FA",
     "sb_text_main":   "#F0F4FF",
     "sb_text_dim":    "#94A3B8",
     "sb_text_tiny":   "#64748B",
+    # chat panel (light)
     "header_bg":      "#FFFFFF",
     "header_border":  "#E2E8F0",
     "msg_bg":         "#FFFFFF",
@@ -41,12 +45,14 @@ CLR = {
     "asst_lbl":       "#059669",
     "sys_text":       "#94A3B8",
     "divider":        "#E2E8F0",
+    # input
     "input_bar_bg":   "#F8FAFC",
     "input_bg":       "#FFFFFF",
     "input_fg":       "#1E293B",
     "input_border":   "#CBD5E1",
     "input_focus":    "#2563EB",
     "placeholder":    "#94A3B8",
+    # status
     "accent":         "#2563EB",
     "accent_hover":   "#1D4ED8",
     "success":        "#10B981",
@@ -59,6 +65,8 @@ FT = {
     "title":   ("Segoe UI", 14, "bold"),
     "sub":     ("Segoe UI", 7,  "bold"),
     "section": ("Segoe UI", 8,  "bold"),
+    "card":    ("Segoe UI", 10, "bold"),
+    "card_d":  ("Segoe UI", 8),
     "header":  ("Segoe UI", 12, "bold"),
     "hdr_s":   ("Segoe UI", 8),
     "chat":    ("Segoe UI", 10),
@@ -66,10 +74,11 @@ FT = {
     "input":   ("Segoe UI", 11),
     "send":    ("Segoe UI", 10, "bold"),
     "status":  ("Segoe UI", 9),
+    "small":   ("Segoe UI", 8),
     "sys":     ("Segoe UI", 8),
 }
 
-SIDEBAR_W = 240
+SIDEBAR_W = 240   # sidebar fixed width in pixels
 
 
 # ─────────────────────────────────────────────
@@ -101,37 +110,31 @@ class SlimScrollbar(tk.Canvas):
 
 
 # ─────────────────────────────────────────────
-#  DASH TILE
+#  SIDEBAR ACTION CARD
 # ─────────────────────────────────────────────
-class DashTile(tk.Frame):
-    def __init__(self, parent, icon, title, subtitle, accent, command, **kwargs):
+class ActionCard(tk.Frame):
+    def __init__(self, parent, icon, title, desc, command, **kwargs):
         super().__init__(parent, bg=CLR["card_bg"],
-                         highlightbackground=accent,
-                         highlightthickness=1,
-                         cursor="hand2", **kwargs)
+                         highlightbackground=CLR["card_border"],
+                         highlightthickness=1, cursor="hand2", **kwargs)
         self._cmd = command
 
-        tk.Frame(self, bg=accent, width=3).pack(side="left", fill="y")
+        badge = tk.Frame(self, bg=CLR["tag_bg"], padx=5, pady=4)
+        badge.pack(side="left", padx=(10, 8), pady=8)
+        tk.Label(badge, text=icon, bg=CLR["tag_bg"],
+                 fg=CLR["tag_fg"], font=("Segoe UI", 13)).pack()
 
-        inner = tk.Frame(self, bg=CLR["card_bg"], padx=9, pady=8)
-        inner.pack(side="left", fill="both", expand=True)
-
-        top = tk.Frame(inner, bg=CLR["card_bg"])
-        top.pack(fill="x")
-        tk.Label(top, text=icon, bg=CLR["card_bg"],
-                 fg=accent, font=("Segoe UI", 13)).pack(side="left", padx=(0, 6))
-        tk.Label(top, text=title, bg=CLR["card_bg"],
-                 fg=CLR["sb_text_main"],
-                 font=("Segoe UI", 9, "bold"), anchor="w").pack(side="left")
-
-        tk.Label(inner, text=subtitle, bg=CLR["card_bg"],
-                 fg=CLR["sb_text_dim"],
-                 font=("Segoe UI", 7), anchor="w").pack(fill="x", pady=(2, 0))
+        txt = tk.Frame(self, bg=CLR["card_bg"])
+        txt.pack(side="left", fill="both", expand=True, pady=8)
+        tk.Label(txt, text=title, bg=CLR["card_bg"],
+                 fg=CLR["sb_text_main"], font=FT["card"], anchor="w").pack(fill="x")
+        tk.Label(txt, text=desc, bg=CLR["card_bg"],
+                 fg=CLR["sb_text_dim"], font=FT["card_d"], anchor="w").pack(fill="x")
 
         tk.Label(self, text="›", bg=CLR["card_bg"],
-                 fg=accent, font=("Segoe UI", 14)).pack(side="right", padx=8)
+                 fg=CLR["sb_text_dim"], font=("Segoe UI", 15)).pack(side="right", padx=8)
 
-        for w in self._all():
+        for w in self._descendants():
             w.bind("<Button-1>", self._fire)
             w.bind("<Enter>",    self._on)
             w.bind("<Leave>",    self._off)
@@ -139,15 +142,15 @@ class DashTile(tk.Frame):
         self.bind("<Enter>",    self._on)
         self.bind("<Leave>",    self._off)
 
-    def _all(self):
+    def _descendants(self):
         out = []
         def walk(w):
             for c in w.winfo_children(): out.append(c); walk(c)
         walk(self); return out
 
-    def _fire(self, _=None):  self._cmd()
-    def _on(self,  _=None):   self.config(bg=CLR["card_hover"])
-    def _off(self, _=None):   self.config(bg=CLR["card_bg"])
+    def _fire(self, _=None): self._cmd()
+    def _on(self,  _=None):  self.config(bg=CLR["card_hover"])
+    def _off(self, _=None):  self.config(bg=CLR["card_bg"])
 
 
 # ─────────────────────────────────────────────
@@ -158,17 +161,20 @@ class GRC360ChatModel:
     def __init__(self, workspace):
         workspace.configure(bg=CLR["app_bg"])
 
-        # ── Sidebar ──
+        # ══════════════════════════════════════
+        #  SIDEBAR — fixed width, full height via pack
+        # ══════════════════════════════════════
         sidebar = tk.Frame(workspace, bg=CLR["sidebar_bg"], width=SIDEBAR_W)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
+        # accent stripe
         tk.Frame(sidebar, bg=CLR["sidebar_accent"], width=4).pack(side="left", fill="y")
 
         body = tk.Frame(sidebar, bg=CLR["sidebar_bg"])
         body.pack(side="left", fill="both", expand=True)
 
-        # Logo
+        # logo
         logo_row = tk.Frame(body, bg=CLR["sidebar_bg"])
         logo_row.pack(fill="x", padx=14, pady=(18, 2))
         dot = tk.Canvas(logo_row, width=10, height=10,
@@ -177,47 +183,40 @@ class GRC360ChatModel:
         dot.pack(side="left", pady=3)
         tk.Label(logo_row, text="  GRC360", bg=CLR["sidebar_bg"],
                  fg=CLR["sb_text_main"], font=FT["title"]).pack(side="left")
+
         tk.Label(body, text="GOVERNANCE · RISK · COMPLIANCE",
                  bg=CLR["sidebar_bg"], fg=CLR["sb_text_tiny"],
-                 font=FT["sub"]).pack(anchor="w", padx=14, pady=(0, 12))
+                 font=FT["sub"]).pack(anchor="w", padx=14, pady=(0, 10))
 
-        tk.Frame(body, bg=CLR["card_border"], height=1).pack(
-            fill="x", padx=14, pady=(0, 12))
+        tk.Frame(body, bg=CLR["card_border"], height=1).pack(fill="x", padx=14, pady=(0, 10))
 
-        # ── 📊 DASHBOARDS ─────────────────────
-        tk.Label(body, text="📊  DASHBOARDS",
+        tk.Label(body, text="⚡  QUICK ACTIONS",
                  bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"],
-                 font=FT["section"]).pack(anchor="w", padx=14, pady=(0, 8))
+                 font=FT["section"]).pack(anchor="w", padx=14, pady=(0, 6))
 
-        DashTile(body,
-                 icon="🧩", title="Process Dashboard",
-                 subtitle="Metrics · Table · Charts",
-                 accent="#2563EB",
-                 command=Process_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
+        ActionCard(body, "🧩", "Create Process",
+                   "Define a new business process",
+                   prompt_Template_Screen).pack(fill="x", padx=10, pady=3)
+        ActionCard(body, "⚠", "Create Risk",
+                   "Identify & assess risks",
+                   Create_Risk_Screen).pack(fill="x", padx=10, pady=3)
+        ActionCard(body, "🛡", "Create Control",
+                   "Mitigate identified risks",
+                   Create_Control_Screen).pack(fill="x", padx=10, pady=3)
 
-        DashTile(body,
-                 icon="🔀", title="Subprocess Dashboard",
-                 subtitle="Status · Dept · Frequency",
-                 accent="#0EA5E9",
-                 command=SubProcess_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
+        # ── NEW: Process Dashboard shortcut card ──────────────
+        tk.Frame(body, bg=CLR["card_border"], height=1).pack(
+            fill="x", padx=14, pady=(10, 6))
+        tk.Label(body, text="📊  REPORTS",
+                 bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"],
+                 font=FT["section"]).pack(anchor="w", padx=14, pady=(0, 6))
 
-        DashTile(body,
-                 icon="⚠️", title="Risk Dashboard",
-                 subtitle="Severity · Likelihood · Owner",
-                 accent="#F97316",
-                 command=Risk_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
+        ActionCard(body, "📈", "Process Dashboard",
+                   "Live metrics & process table",
+                   Process_Dashboard_Screen).pack(fill="x", padx=10, pady=3)
+        # ──────────────────────────────────────────────────────
 
-        DashTile(body,
-                 icon="🛡️", title="Control Dashboard",
-                 subtitle="Type · Category · Status",
-                 accent="#10B981",
-                 command=Control_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
-
-        # ── Status labels ──
+        # status at bottom
         self.intent_label = tk.Label(
             body, text="Intent: —",
             bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"], font=FT["status"])
@@ -228,10 +227,13 @@ class GRC360ChatModel:
             bg=CLR["sidebar_bg"], fg=CLR["success"], font=FT["status"])
         self.status_label.pack(side="bottom", anchor="w", padx=14, pady=(0, 2))
 
-        # ── Chat panel ──
+        # ══════════════════════════════════════
+        #  CHAT PANEL — fills remaining space
+        # ══════════════════════════════════════
         chat_panel = tk.Frame(workspace, bg=CLR["msg_bg"])
         chat_panel.pack(side="left", fill="both", expand=True)
 
+        # ── Header ────────────────────────────
         header = tk.Frame(chat_panel, bg=CLR["header_bg"], height=52)
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
@@ -259,15 +261,22 @@ class GRC360ChatModel:
 
         tk.Frame(chat_panel, bg=CLR["header_border"], height=1).pack(fill="x")
 
+        # ── Input bar ──
         tk.Frame(chat_panel, bg=CLR["divider"], height=1).pack(fill="x", side="bottom")
+
         input_bar = tk.Frame(chat_panel, bg=CLR["input_bar_bg"], height=58)
         input_bar.pack(fill="x", side="bottom")
         input_bar.pack_propagate(False)
 
         self.user_input = tk.Entry(
-            input_bar, font=FT["input"], bg=CLR["input_bg"],
-            fg=CLR["input_fg"], insertbackground=CLR["input_fg"],
-            relief="solid", bd=1, highlightthickness=2,
+            input_bar,
+            font=FT["input"],
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["input_fg"],
+            relief="solid",
+            bd=1,
+            highlightthickness=2,
             highlightbackground=CLR["input_border"],
             highlightcolor=CLR["input_focus"],
         )
@@ -292,27 +301,49 @@ class GRC360ChatModel:
         self.user_input.bind("<FocusIn>",  _fi)
         self.user_input.bind("<FocusOut>", _fo)
 
-        tk.Button(input_bar, text="Send  ›", font=FT["send"],
-                  bg=CLR["accent"], fg="#FFFFFF",
-                  activebackground=CLR["accent_hover"], activeforeground="#FFFFFF",
-                  relief="flat", bd=0, padx=16, pady=6, cursor="hand2",
-                  command=self._send).pack(side="right", padx=(0, 14), pady=10)
+        tk.Button(
+            input_bar,
+            text="Send  ›",
+            font=FT["send"],
+            bg=CLR["accent"],
+            fg="#FFFFFF",
+            activebackground=CLR["accent_hover"],
+            activeforeground="#FFFFFF",
+            relief="flat",
+            bd=0,
+            padx=16,
+            pady=6,
+            cursor="hand2",
+            command=self._send,
+        ).pack(side="right", padx=(0, 14), pady=10)
 
+        # ── Message area ──
         msg_wrap = tk.Frame(chat_panel, bg=CLR["msg_bg"])
         msg_wrap.pack(fill="both", expand=True)
 
         self.chat_box = tk.Text(
-            msg_wrap, wrap=tk.WORD, font=FT["chat"],
-            bg=CLR["msg_bg"], fg=CLR["msg_text"],
+            msg_wrap,
+            wrap=tk.WORD,
+            font=FT["chat"],
+            bg=CLR["msg_bg"],
+            fg=CLR["msg_text"],
             insertbackground=CLR["msg_text"],
-            selectbackground=CLR["accent"], selectforeground="#FFFFFF",
-            relief="flat", bd=0, padx=20, pady=14,
-            cursor="arrow", spacing1=2, spacing3=6,
+            selectbackground=CLR["accent"],
+            selectforeground="#FFFFFF",
+            relief="flat",
+            bd=0,
+            padx=20,
+            pady=14,
+            cursor="arrow",
+            spacing1=2,
+            spacing3=6,
         )
         self.chat_box.pack(side="left", fill="both", expand=True)
+
         SlimScrollbar(msg_wrap, self.chat_box).pack(
             side="right", fill="y", pady=4, padx=(0, 2))
 
+        # text tags
         self.chat_box.tag_configure("sys",
             justify="center", foreground=CLR["sys_text"], font=FT["sys"])
         self.chat_box.tag_configure("you_lbl",
@@ -328,12 +359,16 @@ class GRC360ChatModel:
             lmargin1=8, lmargin2=8, rmargin=180,
             foreground=CLR["msg_text"], font=FT["chat"])
 
+        # seed greeting
         self.chat_box.config(state="normal")
         self.chat_box.insert(tk.END, "── Session started ──\n\n", "sys")
         self.chat_box.insert(tk.END, "Assistant\n", "bot_lbl")
         self.chat_box.insert(tk.END, "Hi — how can I help you today?\n\n", "bot_msg")
         self.chat_box.config(state="disabled")
 
+    # ─────────────────────────────────────────
+    #  CHAT LOGIC
+    # ─────────────────────────────────────────
     def _send(self):
         self.submit_text_Meghana()
 
@@ -342,8 +377,10 @@ class GRC360ChatModel:
         if not raw_text or raw_text == self._ph:
             self.status_label.config(text="⚠ Please enter text.", fg=CLR["warning"])
             return
+
         self.append_chat("You", raw_text)
         self.user_input.delete(0, tk.END)
+
         try:
             intent, assistant_response = agent.classify_intent(raw_text)
             self.intent_label.config(text=f"Intent: {intent}")
@@ -385,20 +422,26 @@ def Test_Execution():
 def send_email():
     send_stage_notification("ssmiley120@gmail.com", "Something", 1, "First", "NONE")
 
-def Process_Dashboard_Screen():    open_process_dashboard(tk.Toplevel())
-def SubProcess_Dashboard_Screen(): open_subprocess_dashboard(tk.Toplevel())
-def Risk_Dashboard_Screen():       open_risk_dashboard(tk.Toplevel())
-def Control_Dashboard_Screen():    open_control_dashboard(tk.Toplevel())
+# ── NEW launcher ──────────────────────────────
+def Process_Dashboard_Screen():
+    open_process_dashboard(tk.Toplevel())
+# ─────────────────────────────────────────────
 
-
+def Accept_Issue():
+    root = tk.Toplevel()
+    AcceptIssueScreen(root, "MANAGER", "siri123")
+    
+def Fix_Issue():
+    root = tk.Toplevel()
+    FixIssueScreen(root, "OWNER", "siri123")
 # ─────────────────────────────────────────────
 #  MAIN FORM
 # ─────────────────────────────────────────────
 def start_main_form():
     root = tk.Tk()
     root.title("GRC_360")
-    root.geometry("900x600")
-    root.minsize(800, 560)
+    root.geometry("900x560")
+    root.minsize(800, 500)
     root.configure(bg=CLR["app_bg"])
 
     menubar = Menu(root, bg="#FFFFFF", fg="#1E293B",
@@ -418,19 +461,20 @@ def start_main_form():
     make_menu("Swetha",      [("Bedrock Health Check Screen",    execute_rag),
                                ("Main Bedrock Guardrail Testing", open_main_bedrock_guardrail),
                                ("Mail Service",                   send_email)])
+
+    # ── Process menu now has 3 items ──────────────────────────
     make_menu("Process",     [("Create Process",                 prompt_Template_Screen),
                                ("View Process",                   View_Process_Screen),
-                               ("Process Dashboard",              Process_Dashboard_Screen)])
+                               ("Process Dashboard",              Process_Dashboard_Screen)])  # ← NEW
+    # ──────────────────────────────────────────────────────────
+
     make_menu("Risk",        [("Create Risk",                    Create_Risk_Screen),
-                               ("View Risk",                      View_Process_Screen),
-                               ("Risk Dashboard",                 Risk_Dashboard_Screen)])
-    make_menu("Control",     [("Create Control",                 Create_Control_Screen),
-                               ("Control Dashboard",              Control_Dashboard_Screen)])
+                               ("View Risk",                      View_Process_Screen)])
+    make_menu("Control",     [("Create Control",                 Create_Control_Screen)])
     make_menu("Test",        [("Test Execution",                 Test_Execution)])
-    make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess),
-                               ("Subprocess Dashboard",           SubProcess_Dashboard_Screen)])
-    make_menu("Workflow",    [("Approve Issue",                  Create_SubProcess),
-                               ("Fix Issue",                      Create_SubProcess)])
+    make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess)])
+    make_menu("Workflow", [("Accept and Assign Issue", Accept_Issue),
+                       ("Fix Issue",     Fix_Issue)])
     root.config(menu=menubar)
 
     workspace = tk.Frame(root, bg=CLR["app_bg"])
