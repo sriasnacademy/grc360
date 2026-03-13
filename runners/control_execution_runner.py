@@ -66,7 +66,8 @@ class ControlExecutionRunner:
                             task_id=task["test_task_id"],
                             control_id=plan["control_id"],
                             test_plan_id=test_plan_id,
-                            test_step_id = task["test_step_id"]
+                            test_step_id = task["test_step_id"],
+                            test_cycle_num= cycle_number
                         )
                         
                         engine = WorkflowEngine()
@@ -78,7 +79,8 @@ class ControlExecutionRunner:
                                 "reference_id": issue_result["issue_id"],
                                 "module_name": "ISSUE",          # ✅ Add this
                                 "performed_by": "SYSTEM",    # ✅ Add this (whatever your user variable is)
-                                "payload_for_eventlog": issue_result["issue_payload"]
+                                "payload_for_eventlog": issue_result["issue_payload"],
+                                "cycle_number":cycle_number
                             }
                         )
       
