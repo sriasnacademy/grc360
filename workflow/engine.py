@@ -59,7 +59,8 @@ class WorkflowEngine:
             workflow_id=workflow["workflow_id"],
             reference_id=payload["reference_id"],
             module_name=payload.get("module_name", ""),
-            initial_stage_id=initial_stage["stage_id"]
+            initial_stage_id=initial_stage["stage_id"],
+            cycle_number = payload["cycle_number"]
         )
         if not instance_id:
             print("❌ Failed to create workflow instance")

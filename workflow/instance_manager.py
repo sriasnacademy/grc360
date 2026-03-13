@@ -209,13 +209,13 @@ class WorkflowInstanceManager:
     # INSTANCE MANAGEMENT
     # ─────────────────────────────────────────────
 
-    def create_instance(self, workflow_id, reference_id, module_name, initial_stage_id):
+    def create_instance(self, workflow_id, reference_id, module_name, initial_stage_id,cycle_number):
         payload = {
             "action": "raw_sql",
             "sql": """INSERT INTO workflow_instance 
-                      (workflow_id, reference_id, module_name, current_stage_id, status, started_at) 
-                      VALUES (%s, %s, %s, %s, 'ACTIVE', NOW())""",
-            "params": [workflow_id, reference_id, module_name, initial_stage_id]
+                      (workflow_id, reference_id, module_name, current_stage_id, status, started_at,cycle_id) 
+                      VALUES (%s, %s, %s, %s, 'ACTIVE', NOW(),%s)""",
+            "params": [workflow_id, reference_id, module_name, initial_stage_id,cycle_number]
         }
         try:
             response = call_lambda(payload)
