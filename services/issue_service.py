@@ -2,7 +2,7 @@ from connectors.lambda_mysql import call_lambda
 from datetime import datetime
 
 class IssueService:
-    def raise_control_failure(self, task_id, control_id,test_plan_id,test_step_id):
+    def raise_control_failure(self, task_id, control_id,test_plan_id,test_step_id,test_cycle_num):
 
         payload =  {
                 "test_task_id":task_id,
@@ -19,6 +19,7 @@ class IssueService:
             "table": "issues",
             "data": {
                 "test_task_id":task_id,
+                "test_cycle_number":test_cycle_num,
                 "control_id": control_id,
                 "test_plan_id": test_plan_id,
                 "test_step_id":test_step_id,
