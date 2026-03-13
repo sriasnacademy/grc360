@@ -1,3 +1,4 @@
+# ui/workflow_tracker.py
 import tkinter as tk
 from tkinter import ttk
 from connectors.lambda_mysql import call_lambda
@@ -7,74 +8,85 @@ from connectors.lambda_mysql import call_lambda
 # DATA LAYER
 # ─────────────────────────────────────────────────────────
 
-def fetch_workflow_instances():
-    payload = {
-        "action": "raw_sql",
-        "sql": """
-            SELECT 
-                wi.instance_id,
-                wi.reference_id,
-                wi.module_name,
-                wi.status,
-                wi.started_at,
-                wi.completed_at,
-                ws.stage_name AS current_stage,
-                ws.stage_order,
-                wd.workflow_name,
-                (SELECT COUNT(*) FROM workflow_stages WHERE workflow_id = wi.workflow_id) AS total_stages
-            FROM workflow_instance wi
-            JOIN workflow_stages ws ON wi.current_stage_id = ws.stage_id
-            JOIN workflow_definitions wd ON wi.workflow_id = wd.workflow_id
-            ORDER BY wi.started_at DESC
-        """,
-        "params": []
-    }
+def fetch_test_plans():
     try:
-        response = call_lambda(payload)
+        response = call_lambda({
+            "action": "raw_sql",
+            "sql": "SELECT test_plan_id, test_plan_name FROM test_plan ORDER BY test_plan_id DESC",
+            "params": []
+        })
         return response.get("records", [])
     except Exception as e:
-        print("❌ fetch_workflow_instances:", e)
+        print("❌ fetch_test_plans:", e)
     return []
 
 
-def fetch_available_transitions(instance_id):
-    payload = {
-        "action": "raw_sql",
-        "sql": """
-            SELECT wt.transition_id, wt.action_name, wt.to_stage_id, wt.role_required,
-                   ws.stage_name AS to_stage_name
-            FROM workflow_instance wi
-            JOIN workflow_transitions wt ON wi.current_stage_id = wt.from_stage_id
-                                        AND wi.workflow_id = wt.workflow_id
-            JOIN workflow_stages ws ON wt.to_stage_id = ws.stage_id
-            WHERE wi.instance_id = %s AND wt.active = 1
-        """,
-        "params": [instance_id]
-    }
+def fetch_cycles_for_plan(test_plan_id):
     try:
-        response = call_lambda(payload)
+        response = call_lambda({
+            "action": "raw_sql",
+            "sql": """
+                SELECT cycle_id, cycle_number, run_by, run_at, active
+                FROM test_cycle
+                WHERE test_plan_id = %s
+                ORDER BY cycle_number ASC
+            """,
+            "params": [test_plan_id]
+        })
         return response.get("records", [])
     except Exception as e:
-        print("❌ fetch_available_transitions:", e)
+        print("❌ fetch_cycles_for_plan:", e)
+    return []
+
+
+def fetch_issues_for_cycle(test_plan_id, cycle_id):
+    try:
+        response = call_lambda({
+            "action": "raw_sql",
+            "sql": """
+                SELECT
+                    i.issue_id,
+                    i.issue_type,
+                    i.status           AS issue_status,
+                    i.assigned_to,
+                    ws.stage_name      AS current_stage,
+                    ws.stage_order     AS stage_order,
+                    wi.instance_id,
+                    wi.status          AS workflow_status,
+                    wi.started_at,
+                    wi.completed_at,
+                    (SELECT COUNT(*) FROM workflow_stages WHERE workflow_id = wi.workflow_id) AS total_stages
+                FROM issues i
+                JOIN workflow_instance wi ON wi.reference_id = i.issue_id
+                                         AND wi.module_name  = 'ISSUE'
+                JOIN workflow_stages ws   ON ws.stage_id = wi.current_stage_id
+                WHERE i.test_plan_id = %s
+                AND wi.cycle_id      = %s
+                ORDER BY i.issue_id ASC
+            """,
+            "params": [test_plan_id, cycle_id]
+        })
+        return response.get("records", [])
+    except Exception as e:
+        print("❌ fetch_issues_for_cycle:", e)
     return []
 
 
 def fetch_workflow_history(instance_id):
-    payload = {
-        "action": "raw_sql",
-        "sql": """
-            SELECT wh.action_performed, wh.performed_by, wh.remarks, wh.performed_at,
-                   fs.stage_name AS from_stage, ts.stage_name AS to_stage
-            FROM workflow_history wh
-            LEFT JOIN workflow_stages fs ON wh.from_stage_id = fs.stage_id
-            LEFT JOIN workflow_stages ts ON wh.to_stage_id = ts.stage_id
-            WHERE wh.instance_id = %s
-            ORDER BY wh.performed_at ASC
-        """,
-        "params": [instance_id]
-    }
     try:
-        response = call_lambda(payload)
+        response = call_lambda({
+            "action": "raw_sql",
+            "sql": """
+                SELECT wh.action_performed, wh.performed_by, wh.remarks, wh.performed_at,
+                       fs.stage_name AS from_stage, ts.stage_name AS to_stage
+                FROM workflow_history wh
+                LEFT JOIN workflow_stages fs ON wh.from_stage_id = fs.stage_id
+                LEFT JOIN workflow_stages ts ON wh.to_stage_id   = ts.stage_id
+                WHERE wh.instance_id = %s
+                ORDER BY wh.performed_at ASC
+            """,
+            "params": [instance_id]
+        })
         return response.get("records", [])
     except Exception as e:
         print("❌ fetch_workflow_history:", e)
@@ -82,19 +94,18 @@ def fetch_workflow_history(instance_id):
 
 
 def fetch_all_stages(instance_id):
-    payload = {
-        "action": "raw_sql",
-        "sql": """
-            SELECT ws.stage_id, ws.stage_name, ws.stage_order, ws.is_terminal
-            FROM workflow_instance wi
-            JOIN workflow_stages ws ON wi.workflow_id = ws.workflow_id
-            WHERE wi.instance_id = %s
-            ORDER BY ws.stage_order ASC
-        """,
-        "params": [instance_id]
-    }
     try:
-        response = call_lambda(payload)
+        response = call_lambda({
+            "action": "raw_sql",
+            "sql": """
+                SELECT ws.stage_id, ws.stage_name, ws.stage_order, ws.is_terminal
+                FROM workflow_instance wi
+                JOIN workflow_stages ws ON wi.workflow_id = ws.workflow_id
+                WHERE wi.instance_id = %s
+                ORDER BY ws.stage_order ASC
+            """,
+            "params": [instance_id]
+        })
         return response.get("records", [])
     except Exception as e:
         print("❌ fetch_all_stages:", e)
@@ -107,498 +118,458 @@ def fetch_all_stages(instance_id):
 
 class WorkflowTrackerTab:
 
-    STAGE_COLORS = {
-        "done":    {"bg": "#D1FAE5", "fg": "#065F46", "circle": "#10B981"},
-        "active":  {"bg": "#DBEAFE", "fg": "#1E40AF", "circle": "#3B82F6"},
-        "pending": {"bg": "#F3F4F6", "fg": "#9CA3AF", "circle": "#D1D5DB"},
-    }
+    # Colours
+    C_BG        = "#F0F4F8"
+    C_SIDEBAR   = "#1B2A3B"
+    C_PANEL     = "#FFFFFF"
+    C_ACCENT    = "#2563EB"
+    C_GREEN     = "#059669"
+    C_AMBER     = "#D97706"
+    C_RED       = "#DC2626"
+    C_MUTED     = "#6B7280"
+    C_BORDER    = "#E2E8F0"
+    C_CYCLE_HDR = "#EFF6FF"
 
-    STATUS_COLORS = {
-        "ACTIVE":    ("#EFF6FF", "#1D4ED8"),
-        "COMPLETED": ("#ECFDF5", "#065F46"),
-        "CANCELLED": ("#FEF2F2", "#991B1B"),
+    STATUS_META = {
+        "ISSUE CLOSED": ("#D1FAE5", "#065F46", "✔  CLOSED"),
+        "fix_issue":    ("#FEF3C7", "#92400E", "🔧  FIXED"),
+        "OPEN":         ("#FEE2E2", "#991B1B", "⚠  OPEN"),
+        "ACTIVE":       ("#DBEAFE", "#1E40AF", "⏳  ACTIVE"),
     }
 
     def __init__(self, parent_notebook):
-        self.tab = tk.Frame(parent_notebook, bg="#F9FAFB")
+        self.tab = tk.Frame(parent_notebook, bg=self.C_BG)
         parent_notebook.add(self.tab, text="Workflow Tracker")
+        self._selected_plan_id   = None
+        self._selected_cycle_id  = None
+        self._plan_buttons        = {}
+        self._cycle_buttons       = {}
         self._build()
 
+    # ─────────────────────────────────────────────
+    # LAYOUT
+    # ─────────────────────────────────────────────
+
     def _build(self):
-        # ── Top bar ──
-        topbar = tk.Frame(self.tab, bg="#1E3A5F", pady=12)
+        # ── Top bar ──────────────────────────────
+        topbar = tk.Frame(self.tab, bg=self.C_SIDEBAR, height=52)
         topbar.pack(fill="x")
+        topbar.pack_propagate(False)
 
         tk.Label(
             topbar,
-            text="⚙  Workflow Instance Tracker",
-            font=("Segoe UI", 14, "bold"),
-            fg="white", bg="#1E3A5F"
-        ).pack(side="left", padx=20)
+            text="⚙   GRC360 — Workflow Tracker",
+            font=("Segoe UI", 13, "bold"),
+            fg="white", bg=self.C_SIDEBAR
+        ).pack(side="left", padx=20, pady=12)
 
         tk.Button(
-            topbar,
-            text="⟳  Refresh",
-            font=("Segoe UI", 10, "bold"),
-            bg="#3B82F6", fg="white",
+            topbar, text="⟳  Refresh",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.C_ACCENT, fg="white",
             relief="flat", padx=12, pady=4,
             cursor="hand2",
-            command=self._load_instances
-        ).pack(side="right", padx=20)
+            command=self._load_plans
+        ).pack(side="right", padx=16, pady=10)
 
-        # ── Search ──
-        search_bar = tk.Frame(self.tab, bg="#F9FAFB", pady=8)
-        search_bar.pack(fill="x", padx=20)
+        # ── Three-column layout ───────────────────
+        body = tk.Frame(self.tab, bg=self.C_BG)
+        body.pack(fill="both", expand=True)
 
-        tk.Label(search_bar, text="🔍", font=("Segoe UI", 12), bg="#F9FAFB").pack(side="left")
+        # Col 1 — Test Plans
+        self._col_plans = self._make_sidebar_col(body, "TEST PLANS", 220)
+        self._col_plans.pack(side="left", fill="y")
 
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._filter_instances())
-        tk.Entry(
-            search_bar,
-            textvariable=self.search_var,
-            font=("Segoe UI", 11),
-            width=35,
-            relief="solid", bd=1
-        ).pack(side="left", padx=8)
+        tk.Frame(body, bg=self.C_BORDER, width=1).pack(side="left", fill="y")
 
-        # ── Status filter ──
-        tk.Label(search_bar, text="Status:", font=("Segoe UI", 10), bg="#F9FAFB").pack(side="left", padx=(20, 4))
-        self.status_filter = ttk.Combobox(
-            search_bar,
-            values=["All", "ACTIVE", "COMPLETED", "CANCELLED"],
-            width=12, state="readonly", font=("Segoe UI", 10)
-        )
-        self.status_filter.set("All")
-        self.status_filter.bind("<<ComboboxSelected>>", lambda *_: self._filter_instances())
-        self.status_filter.pack(side="left")
+        # Col 2 — Cycles + Issues
+        self._col_cycles = self._make_sidebar_col(body, "CYCLES & ISSUES", 310)
+        self._col_cycles.pack(side="left", fill="y")
 
-        # ── Main split ──
-        pane = tk.PanedWindow(self.tab, orient="horizontal", bg="#E5E7EB", sashwidth=4)
-        pane.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        tk.Frame(body, bg=self.C_BORDER, width=1).pack(side="left", fill="y")
 
-        # LEFT: instance list
-        left = tk.Frame(pane, bg="#F9FAFB")
-        pane.add(left, minsize=340)
+        # Col 3 — Detail
+        self._col_detail = tk.Frame(body, bg=self.C_PANEL)
+        self._col_detail.pack(side="left", fill="both", expand=True)
 
-        tk.Label(
-            left,
-            text="Instances",
-            font=("Segoe UI", 11, "bold"),
-            bg="#F9FAFB", fg="#374151"
-        ).pack(anchor="w", padx=10, pady=(8, 4))
+        self._show_placeholder(self._col_detail, "← Select a Test Plan")
+        self._load_plans()
 
-        list_container = tk.Frame(left, bg="#F9FAFB")
-        list_container.pack(fill="both", expand=True)
+    def _make_sidebar_col(self, parent, title, width):
+        outer = tk.Frame(parent, bg=self.C_BG, width=width)
+        outer.pack_propagate(False)
 
-        self.list_canvas = tk.Canvas(list_container, bg="#F9FAFB", highlightthickness=0)
-        list_scroll = ttk.Scrollbar(list_container, orient="vertical", command=self.list_canvas.yview)
-        self.list_inner = tk.Frame(self.list_canvas, bg="#F9FAFB")
+        hdr = tk.Frame(outer, bg=self.C_SIDEBAR, height=34)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text=title, font=("Segoe UI", 8, "bold"),
+                 fg="#93C5FD", bg=self.C_SIDEBAR).pack(side="left", padx=12, pady=8)
 
-        self.list_inner.bind(
-            "<Configure>",
-            lambda e: self.list_canvas.configure(scrollregion=self.list_canvas.bbox("all"))
-        )
-        self.list_canvas.create_window((0, 0), window=self.list_inner, anchor="nw")
-        self.list_canvas.configure(yscrollcommand=list_scroll.set)
+        canvas = tk.Canvas(outer, bg=self.C_BG, highlightthickness=0)
+        sb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg=self.C_BG)
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
 
-        self.list_canvas.pack(side="left", fill="both", expand=True)
-        list_scroll.pack(side="right", fill="y")
+        # Mouse wheel scroll
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        # RIGHT: detail panel
-        self.right = tk.Frame(pane, bg="white")
-        pane.add(self.right, minsize=500)
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
-        self._show_empty_detail()
-        self._load_instances()
+        # store inner and canvas for later population
+        outer._inner  = inner
+        outer._canvas = canvas
+        return outer
 
     # ─────────────────────────────────────────────
-    # LOAD & FILTER
+    # PLANS
     # ─────────────────────────────────────────────
 
-    def _load_instances(self):
-        self.all_instances = fetch_workflow_instances()
-        self._filter_instances()
-
-    def _filter_instances(self):
-        keyword = self.search_var.get().lower()
-        status_f = self.status_filter.get()
-
-        filtered = [
-            i for i in self.all_instances
-            if keyword in (
-                str(i.get("reference_id", "")) +
-                i.get("module_name", "") +
-                i.get("workflow_name", "") +
-                i.get("current_stage", "")
-            ).lower()
-            and (status_f == "All" or i.get("status") == status_f)
-        ]
-        self._render_instance_list(filtered)
-
-    # ─────────────────────────────────────────────
-    # LEFT PANEL: INSTANCE LIST
-    # ─────────────────────────────────────────────
-
-    def _render_instance_list(self, instances):
-        for w in self.list_inner.winfo_children():
+    def _load_plans(self):
+        plans = fetch_test_plans()
+        inner = self._col_plans._inner
+        for w in inner.winfo_children():
             w.destroy()
+        self._plan_buttons = {}
 
-        if not instances:
-            tk.Label(
-                self.list_inner,
-                text="No instances found.",
-                font=("Segoe UI", 10),
-                fg="#9CA3AF", bg="#F9FAFB"
-            ).pack(pady=30)
+        if not plans:
+            tk.Label(inner, text="No plans found.", font=("Segoe UI", 9),
+                     fg=self.C_MUTED, bg=self.C_BG).pack(pady=20)
             return
 
-        for inst in instances:
-            self._create_instance_card(inst)
+        for plan in plans:
+            pid  = plan["test_plan_id"]
+            name = plan["test_plan_name"]
 
-    def _create_instance_card(self, inst):
-        status = inst.get("status", "ACTIVE")
-        bg_color, fg_color = self.STATUS_COLORS.get(status, ("#F9FAFB", "#374151"))
+            btn = tk.Label(
+                inner,
+                text=f"  📋  {name}",
+                font=("Segoe UI", 9),
+                fg="#1E293B", bg=self.C_BG,
+                anchor="w", cursor="hand2",
+                padx=8, pady=8,
+                wraplength=195, justify="left"
+            )
+            btn.pack(fill="x", padx=4, pady=2)
+            btn.bind("<Button-1>", lambda e, p=plan: self._select_plan(p))
+            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg="#DBEAFE"))
+            btn.bind("<Leave>", lambda e, b=btn, pid=pid: b.configure(
+                bg=self.C_ACCENT if pid == self._selected_plan_id else self.C_BG
+            ))
+            self._plan_buttons[pid] = btn
 
-        card = tk.Frame(
-            self.list_inner,
-            bg=bg_color, bd=1, relief="solid",
-            padx=12, pady=8, cursor="hand2"
-        )
-        card.pack(fill="x", padx=8, pady=4)
+    def _select_plan(self, plan):
+        pid = plan["test_plan_id"]
+        self._selected_plan_id  = pid
+        self._selected_cycle_id = None
 
-        # Header row
-        header = tk.Frame(card, bg=bg_color)
-        header.pack(fill="x")
+        # Highlight
+        for p, b in self._plan_buttons.items():
+            b.configure(bg=self.C_ACCENT if p == pid else self.C_BG,
+                        fg="white" if p == pid else "#1E293B")
 
-        tk.Label(
-            header,
-            text=f"#{inst['instance_id']}  {inst.get('module_name', '')} — Ref {inst['reference_id']}",
-            font=("Segoe UI", 10, "bold"),
-            fg=fg_color, bg=bg_color
-        ).pack(side="left")
-
-        tk.Label(
-            header,
-            text=status,
-            font=("Segoe UI", 8, "bold"),
-            fg=fg_color, bg=bg_color
-        ).pack(side="right")
-
-        # Stage
-        tk.Label(
-            card,
-            text=f"📍 {inst.get('current_stage', '—')}",
-            font=("Segoe UI", 9),
-            fg="#4B5563", bg=bg_color
-        ).pack(anchor="w", pady=(2, 0))
-
-        # Progress bar
-        total = inst.get("total_stages", 1) or 1
-        order = inst.get("stage_order", 1) or 1
-        pct = int((order / total) * 100)
-
-        pb_frame = tk.Frame(card, bg=bg_color)
-        pb_frame.pack(fill="x", pady=(4, 0))
-
-        ttk.Progressbar(
-            pb_frame,
-            orient="horizontal",
-            length=200,
-            mode="determinate",
-            value=pct
-        ).pack(side="left")
-
-        tk.Label(
-            pb_frame,
-            text=f"{pct}%",
-            font=("Segoe UI", 8),
-            fg="#6B7280", bg=bg_color
-        ).pack(side="left", padx=6)
-
-        # Started at
-        tk.Label(
-            card,
-            text=f"Started: {inst.get('started_at', '—')}",
-            font=("Segoe UI", 8),
-            fg="#9CA3AF", bg=bg_color
-        ).pack(anchor="w")
-
-        # Click binding
-        for widget in [card, header] + card.winfo_children():
-            widget.bind("<Button-1>", lambda e, i=inst: self._show_detail(i))
-
-        card.bind("<Enter>", lambda e, c=card, b=bg_color: c.configure(relief="groove"))
-        card.bind("<Leave>", lambda e, c=card: c.configure(relief="solid"))
+        self._load_cycles(pid)
+        self._show_placeholder(self._col_detail, "← Select a Cycle to view issues")
 
     # ─────────────────────────────────────────────
-    # RIGHT PANEL: DETAIL VIEW
+    # CYCLES
     # ─────────────────────────────────────────────
 
-    def _clear_detail(self):
-        for w in self.right.winfo_children():
+    def _load_cycles(self, plan_id):
+        cycles = fetch_cycles_for_plan(plan_id)
+        inner  = self._col_cycles._inner
+        for w in inner.winfo_children():
+            w.destroy()
+        self._cycle_buttons = {}
+
+        if not cycles:
+            tk.Label(inner, text="No cycles found.", font=("Segoe UI", 9),
+                     fg=self.C_MUTED, bg=self.C_BG).pack(pady=20)
+            return
+
+        for cyc in cycles:
+            cid    = cyc["cycle_id"]
+            cnum   = cyc["cycle_number"]
+            run_by = cyc.get("run_by", "—")
+            run_at = str(cyc.get("run_at", "—"))[:16]
+
+            card = tk.Frame(inner, bg=self.C_PANEL, bd=1, relief="solid", padx=10, pady=8)
+            card.pack(fill="x", padx=6, pady=4)
+
+            tk.Label(card, text=f"Cycle #{cnum}",
+                     font=("Segoe UI", 10, "bold"),
+                     fg=self.C_ACCENT, bg=self.C_PANEL).pack(anchor="w")
+            tk.Label(card, text=f"Run by: {run_by}  |  {run_at}",
+                     font=("Segoe UI", 8), fg=self.C_MUTED,
+                     bg=self.C_PANEL).pack(anchor="w")
+
+            def _bind_card(card, cyc, cid):
+                def on_click(e):
+                    self._select_cycle(cyc)
+                def on_enter(e):
+                    card.configure(bg="#EFF6FF")
+                    for w in card.winfo_children():
+                        try: w.configure(bg="#EFF6FF")
+                        except: pass
+                def on_leave(e):
+                    clr = self.C_CYCLE_HDR if cid == self._selected_cycle_id else self.C_PANEL
+                    card.configure(bg=clr)
+                    for w in card.winfo_children():
+                        try: w.configure(bg=clr)
+                        except: pass
+
+                card.bind("<Button-1>", on_click)
+                card.bind("<Enter>", on_enter)
+                card.bind("<Leave>", on_leave)
+                for w in card.winfo_children():
+                    w.bind("<Button-1>", on_click)
+                    w.bind("<Enter>", on_enter)
+                    w.bind("<Leave>", on_leave)
+
+            _bind_card(card, cyc, cid)
+            self._cycle_buttons[cid] = card
+
+    def _select_cycle(self, cyc):
+        cid = cyc["cycle_id"]
+        self._selected_cycle_id = cid
+
+        for c, card in self._cycle_buttons.items():
+            card.configure(bg=self.C_CYCLE_HDR if c == cid else self.C_PANEL)
+
+        issues = fetch_issues_for_cycle(self._selected_plan_id, cid)
+        self._render_detail(cyc, issues)
+
+    # ─────────────────────────────────────────────
+    # DETAIL PANEL
+    # ─────────────────────────────────────────────
+
+    def _show_placeholder(self, parent, msg):
+        for w in parent.winfo_children():
+            w.destroy()
+        tk.Label(parent, text=msg, font=("Segoe UI", 12),
+                 fg=self.C_MUTED, bg=self.C_PANEL).pack(expand=True)
+
+    def _render_detail(self, cyc, issues):
+        panel = self._col_detail
+        for w in panel.winfo_children():
             w.destroy()
 
-    def _show_empty_detail(self):
-        self._clear_detail()
-        tk.Label(
-            self.right,
-            text="← Select an instance to view details",
-            font=("Segoe UI", 12),
-            fg="#9CA3AF", bg="white"
-        ).pack(expand=True)
-
-    def _show_detail(self, inst):
-        self._clear_detail()
-
-        instance_id = inst["instance_id"]
-
-        # Scrollable detail
-        canvas = tk.Canvas(self.right, bg="white", highlightthickness=0)
-        scroll = ttk.Scrollbar(self.right, orient="vertical", command=canvas.yview)
-        inner = tk.Frame(canvas, bg="white")
-
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        # Scrollable canvas
+        canvas = tk.Canvas(panel, bg=self.C_PANEL, highlightthickness=0)
+        sb     = ttk.Scrollbar(panel, orient="vertical", command=canvas.yview)
+        inner  = tk.Frame(canvas, bg=self.C_PANEL)
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=inner, anchor="nw")
-        canvas.configure(yscrollcommand=scroll.set)
-
+        canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        sb.pack(side="right", fill="y")
 
-        # ── Header ──
-        hdr = tk.Frame(inner, bg="#1E3A5F", pady=14)
+        def _on_mousewheel_detail(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel_detail))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # ── Cycle header ──────────────────────────
+        hdr = tk.Frame(inner, bg=self.C_SIDEBAR, pady=14)
         hdr.pack(fill="x")
 
-        tk.Label(
-            hdr,
-            text=f"Instance #{instance_id}  ·  {inst.get('module_name','')} Ref:{inst['reference_id']}",
-            font=("Segoe UI", 13, "bold"),
-            fg="white", bg="#1E3A5F"
-        ).pack(anchor="w", padx=20)
+        tk.Label(hdr,
+                 text=f"Cycle #{cyc['cycle_number']}",
+                 font=("Segoe UI", 14, "bold"),
+                 fg="white", bg=self.C_SIDEBAR).pack(anchor="w", padx=20)
+        tk.Label(hdr,
+                 text=f"Run by: {cyc.get('run_by','—')}   Started: {str(cyc.get('run_at','—'))[:16]}",
+                 font=("Segoe UI", 9), fg="#93C5FD",
+                 bg=self.C_SIDEBAR).pack(anchor="w", padx=20)
 
-        tk.Label(
-            hdr,
-            text=inst.get("workflow_name", ""),
-            font=("Segoe UI", 10),
-            fg="#93C5FD", bg="#1E3A5F"
-        ).pack(anchor="w", padx=20)
+        # ── Summary bar ───────────────────────────
+        total  = len(issues)
+        closed = sum(1 for i in issues if i["issue_status"] == "ISSUE CLOSED")
+        fixed  = sum(1 for i in issues if i["issue_status"] == "fix_issue")
+        open_  = total - closed - fixed
 
-        # ── Stage Pipeline ──
-        self._render_stage_pipeline(inner, instance_id, inst.get("stage_order", 1))
+        sumbar = tk.Frame(inner, bg="#F8FAFC", pady=10)
+        sumbar.pack(fill="x", padx=20, pady=(12, 4))
 
-        # ── Available Actions ──
-        self._render_actions_panel(inner, instance_id)
+        for label, val, color in [
+            ("Total Issues", total, self.C_ACCENT),
+            ("Closed",       closed, self.C_GREEN),
+            ("Fixed",        fixed,  self.C_AMBER),
+            ("Open",         open_,  self.C_RED),
+        ]:
+            box = tk.Frame(sumbar, bg=color, padx=16, pady=8)
+            box.pack(side="left", padx=6)
+            tk.Label(box, text=str(val), font=("Segoe UI", 18, "bold"),
+                     fg="white", bg=color).pack()
+            tk.Label(box, text=label, font=("Segoe UI", 8),
+                     fg="white", bg=color).pack()
 
-        # ── History ──
-        self._render_history(inner, instance_id)
+        tk.Frame(inner, bg=self.C_BORDER, height=1).pack(fill="x", padx=20, pady=10)
 
-    # ─────────────────────────────────────────────
-    # STAGE PIPELINE
-    # ─────────────────────────────────────────────
-
-    def _render_stage_pipeline(self, parent, instance_id, current_order):
-        stages = fetch_all_stages(instance_id)
-        if not stages:
+        # ── Issue cards ───────────────────────────
+        if not issues:
+            tk.Label(inner, text="No issues raised in this cycle.",
+                     font=("Segoe UI", 10), fg=self.C_MUTED,
+                     bg=self.C_PANEL).pack(pady=30)
             return
 
-        section = tk.Frame(parent, bg="white", pady=10)
-        section.pack(fill="x", padx=20)
+        tk.Label(inner, text="ISSUES",
+                 font=("Segoe UI", 9, "bold"),
+                 fg=self.C_MUTED, bg=self.C_PANEL).pack(anchor="w", padx=20, pady=(0, 6))
 
-        tk.Label(
-            section,
-            text="STAGE PIPELINE",
-            font=("Segoe UI", 9, "bold"),
-            fg="#6B7280", bg="white"
-        ).pack(anchor="w", pady=(0, 8))
+        for issue in issues:
+            self._render_issue_card(inner, issue)
 
-        pipeline = tk.Frame(section, bg="white")
-        pipeline.pack(fill="x")
+    def _render_issue_card(self, parent, issue):
+        status     = issue.get("issue_status", "OPEN")
+        wf_status  = issue.get("workflow_status", "ACTIVE")
+        stage_ord  = issue.get("stage_order", 1) or 1
+        total_stg  = issue.get("total_stages", 1) or 1
+        instance_id = issue.get("instance_id")
 
-        for idx, stage in enumerate(stages):
-            order = stage.get("stage_order", idx + 1)
-
-            if order < current_order:
-                state = "done"
-                icon = "✓"
-            elif order == current_order:
-                state = "active"
-                icon = "●"
-            else:
-                state = "pending"
-                icon = str(order)
-
-            colors = self.STAGE_COLORS[state]
-
-            col = tk.Frame(pipeline, bg="white")
-            col.pack(side="left", padx=4)
-
-            # Circle
-            circle = tk.Label(
-                col,
-                text=icon,
-                font=("Segoe UI", 9, "bold"),
-                fg=colors["fg"],
-                bg=colors["circle"],
-                width=3, height=1,
-                relief="flat"
-            )
-            circle.pack()
-
-            # Label
-            tk.Label(
-                col,
-                text=stage["stage_name"],
-                font=("Segoe UI", 8),
-                fg=colors["fg"],
-                bg="white",
-                wraplength=70,
-                justify="center"
-            ).pack()
-
-            # Connector arrow (not after last)
-            if idx < len(stages) - 1:
-                tk.Label(
-                    pipeline,
-                    text="→",
-                    font=("Segoe UI", 12),
-                    fg="#D1D5DB", bg="white"
-                ).pack(side="left", pady=0)
-
-        # Separator
-        tk.Frame(parent, bg="#E5E7EB", height=1).pack(fill="x", padx=20, pady=8)
-
-    # ─────────────────────────────────────────────
-    # AVAILABLE ACTIONS
-    # ─────────────────────────────────────────────
-
-    def _render_actions_panel(self, parent, instance_id):
-        transitions = fetch_available_transitions(instance_id)
-
-        section = tk.Frame(parent, bg="white", pady=6)
-        section.pack(fill="x", padx=20)
-
-        tk.Label(
-            section,
-            text="AVAILABLE NEXT ACTIONS",
-            font=("Segoe UI", 9, "bold"),
-            fg="#6B7280", bg="white"
-        ).pack(anchor="w", pady=(0, 6))
-
-        if not transitions:
-            tk.Label(
-                section,
-                text="No actions available (terminal stage or workflow complete).",
-                font=("Segoe UI", 9),
-                fg="#9CA3AF", bg="white"
-            ).pack(anchor="w")
+        # If ISSUE CLOSED → 100%. Otherwise proportional.
+        if status == "ISSUE CLOSED" or wf_status == "COMPLETED":
+            pct = 100
         else:
-            for t in transitions:
-                row = tk.Frame(section, bg="#EFF6FF", bd=1, relief="solid", padx=10, pady=6)
-                row.pack(fill="x", pady=3)
+            pct = int((stage_ord / total_stg) * 100)
 
-                tk.Label(
-                    row,
-                    text=f"▶  {t['action_name']}",
-                    font=("Segoe UI", 10, "bold"),
-                    fg="#1D4ED8", bg="#EFF6FF"
-                ).pack(side="left")
+        bg_clr, fg_clr, status_lbl = self.STATUS_META.get(
+            status, ("#F3F4F6", "#374151", status)
+        )
 
-                tk.Label(
-                    row,
-                    text=f"→ {t['to_stage_name']}",
-                    font=("Segoe UI", 9),
-                    fg="#3B82F6", bg="#EFF6FF"
-                ).pack(side="left", padx=10)
+        # Card frame
+        card = tk.Frame(parent, bg=bg_clr, bd=1, relief="solid", padx=14, pady=10)
+        card.pack(fill="x", padx=20, pady=5)
 
-                if t.get("role_required"):
-                    tk.Label(
-                        row,
-                        text=f"🔒 {t['role_required']}",
-                        font=("Segoe UI", 8),
-                        fg="#6B7280", bg="#EFF6FF"
-                    ).pack(side="right")
+        # ── Row 1: Issue ID + status badge ────────
+        row1 = tk.Frame(card, bg=bg_clr)
+        row1.pack(fill="x")
 
-        tk.Frame(parent, bg="#E5E7EB", height=1).pack(fill="x", padx=20, pady=8)
+        tk.Label(row1,
+                 text=f"Issue #{issue['issue_id']}",
+                 font=("Segoe UI", 11, "bold"),
+                 fg=fg_clr, bg=bg_clr).pack(side="left")
 
-    # ─────────────────────────────────────────────
-    # HISTORY TIMELINE
-    # ─────────────────────────────────────────────
+        badge = tk.Label(row1, text=status_lbl,
+                         font=("Segoe UI", 8, "bold"),
+                         fg=fg_clr, bg=bg_clr,
+                         relief="solid", bd=1, padx=6, pady=2)
+        badge.pack(side="right")
 
-    def _render_history(self, parent, instance_id):
-        history = fetch_workflow_history(instance_id)
+        # ── Row 2: Issue type ─────────────────────
+        tk.Label(card,
+                 text=issue.get("issue_type", "—"),
+                 font=("Segoe UI", 9),
+                 fg="#4B5563", bg=bg_clr,
+                 wraplength=460, justify="left").pack(anchor="w", pady=(2, 4))
 
-        section = tk.Frame(parent, bg="white", pady=6)
-        section.pack(fill="x", padx=20, pady=(0, 20))
+        # ── Row 3: Stage + assigned ───────────────
+        row3 = tk.Frame(card, bg=bg_clr)
+        row3.pack(fill="x")
 
-        tk.Label(
-            section,
-            text="HISTORY TIMELINE",
-            font=("Segoe UI", 9, "bold"),
-            fg="#6B7280", bg="white"
-        ).pack(anchor="w", pady=(0, 6))
+        tk.Label(row3,
+                 text=f"📍 {issue.get('current_stage','—')}",
+                 font=("Segoe UI", 9),
+                 fg="#374151", bg=bg_clr).pack(side="left")
 
-        if not history:
-            tk.Label(
-                section,
-                text="No history available.",
-                font=("Segoe UI", 9),
-                fg="#9CA3AF", bg="white"
-            ).pack(anchor="w")
-            return
+        tk.Label(row3,
+                 text=f"👤 {issue.get('assigned_to','—')}",
+                 font=("Segoe UI", 9),
+                 fg=self.C_MUTED, bg=bg_clr).pack(side="right")
 
-        for entry in history:
-            row = tk.Frame(section, bg="white")
-            row.pack(fill="x", pady=2)
+        # ── Progress bar ──────────────────────────
+        pb_frame = tk.Frame(card, bg=bg_clr)
+        pb_frame.pack(fill="x", pady=(6, 2))
 
-            # Timeline dot
-            tk.Label(
-                row,
-                text="◉",
-                font=("Segoe UI", 10),
-                fg="#3B82F6", bg="white"
-            ).pack(side="left", anchor="n", pady=2)
+        bar_color = "#059669" if pct == 100 else self.C_ACCENT
+        style_name = f"Issue{issue['issue_id']}.Horizontal.TProgressbar"
+        style = ttk.Style()
+        style.configure(style_name,
+                        troughcolor=self.C_BORDER,
+                        background=bar_color,
+                        thickness=10)
 
-            info = tk.Frame(row, bg="#F9FAFB", bd=1, relief="solid", padx=10, pady=6)
-            info.pack(side="left", fill="x", expand=True, padx=8)
+        ttk.Progressbar(pb_frame,
+                        style=style_name,
+                        orient="horizontal",
+                        length=400,
+                        mode="determinate",
+                        value=pct).pack(side="left", fill="x", expand=True)
 
-            # Action + time
-            top_row = tk.Frame(info, bg="#F9FAFB")
-            top_row.pack(fill="x")
+        tk.Label(pb_frame,
+                 text=f"{pct}%",
+                 font=("Segoe UI", 9, "bold"),
+                 fg=fg_clr, bg=bg_clr).pack(side="left", padx=8)
 
-            tk.Label(
-                top_row,
-                text=entry.get("action_performed", ""),
-                font=("Segoe UI", 10, "bold"),
-                fg="#111827", bg="#F9FAFB"
-            ).pack(side="left")
+        # ── Expandable history ─────────────────────
+        hist_frame = tk.Frame(card, bg=bg_clr)
 
-            tk.Label(
-                top_row,
-                text=str(entry.get("performed_at", "")),
-                font=("Segoe UI", 8),
-                fg="#9CA3AF", bg="#F9FAFB"
-            ).pack(side="right")
+        def toggle_history(hf=hist_frame, iid=instance_id):
+            if hf.winfo_viewable():
+                hf.pack_forget()
+            else:
+                for w in hf.winfo_children():
+                    w.destroy()
+                history = fetch_workflow_history(iid)
+                if not history:
+                    tk.Label(hf, text="No history.",
+                             font=("Segoe UI", 8),
+                             fg=self.C_MUTED, bg=bg_clr).pack(anchor="w")
+                else:
+                    for entry in history:
+                        self._render_history_row(hf, entry, bg_clr)
+                hf.pack(fill="x", pady=(6, 0))
 
-            # Stage transition
-            from_s = entry.get("from_stage") or "—"
-            to_s = entry.get("to_stage") or "—"
-            tk.Label(
-                info,
-                text=f"{from_s}  →  {to_s}",
-                font=("Segoe UI", 9),
-                fg="#4B5563", bg="#F9FAFB"
-            ).pack(anchor="w")
+        tk.Button(card,
+                  text="▸ View History",
+                  font=("Segoe UI", 8),
+                  fg=self.C_ACCENT, bg=bg_clr,
+                  relief="flat", cursor="hand2",
+                  command=toggle_history).pack(anchor="w", pady=(4, 0))
 
-            # Performed by + remarks
-            meta = f"By: {entry.get('performed_by', '—')}"
-            if entry.get("remarks"):
-                meta += f"   |   {entry['remarks']}"
+    def _render_history_row(self, parent, entry, bg_clr):
+        row = tk.Frame(parent, bg=bg_clr, pady=3)
+        row.pack(fill="x")
 
-            tk.Label(
-                info,
-                text=meta,
-                font=("Segoe UI", 8),
-                fg="#6B7280", bg="#F9FAFB",
-                wraplength=400,
-                justify="left"
-            ).pack(anchor="w")
+        tk.Label(row, text="◉",
+                 font=("Segoe UI", 9), fg=self.C_ACCENT,
+                 bg=bg_clr).pack(side="left", anchor="n", pady=1)
+
+        info = tk.Frame(row, bg="#F1F5F9", bd=1, relief="solid", padx=8, pady=4)
+        info.pack(side="left", fill="x", expand=True, padx=6)
+
+        top = tk.Frame(info, bg="#F1F5F9")
+        top.pack(fill="x")
+
+        tk.Label(top,
+                 text=entry.get("action_performed", ""),
+                 font=("Segoe UI", 9, "bold"),
+                 fg="#111827", bg="#F1F5F9").pack(side="left")
+
+        tk.Label(top,
+                 text=str(entry.get("performed_at", ""))[:16],
+                 font=("Segoe UI", 8),
+                 fg=self.C_MUTED, bg="#F1F5F9").pack(side="right")
+
+        from_s = entry.get("from_stage") or "—"
+        to_s   = entry.get("to_stage")   or "—"
+        tk.Label(info,
+                 text=f"{from_s}  →  {to_s}",
+                 font=("Segoe UI", 8),
+                 fg="#4B5563", bg="#F1F5F9").pack(anchor="w")
+
+        meta = f"By: {entry.get('performed_by','—')}"
+        if entry.get("remarks"):
+            meta += f"   |   {entry['remarks']}"
+        tk.Label(info,
+                 text=meta,
+                 font=("Segoe UI", 8),
+                 fg=self.C_MUTED, bg="#F1F5F9",
+                 wraplength=380, justify="left").pack(anchor="w")
