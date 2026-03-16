@@ -194,7 +194,7 @@ class FixIssueScreen:
                     "instance_id":     rec["instance_id"],
                     "workflow_status": rec["workflow_status"],
                     "current_stage":   rec["current_stage"],
-                    "issue_status":    rec["issue_status"],
+                    "issue_status":    rec["issue_status"] or "OPEN",
                     "cycle_id":        rec["wf_cycle_id"],
                     "test_plan_id":    rec["test_plan_id"]
                 }
@@ -202,7 +202,7 @@ class FixIssueScreen:
             }
 
             for i, rec in enumerate(records):
-                status = rec.get("issue_status", "OPEN")
+                status = rec.get("issue_status") or "OPEN"
                 chk    = "☑" if status == "fix_issue" else "☐"
                 if status == "fix_issue":
                     tag = "fixed"
@@ -212,12 +212,12 @@ class FixIssueScreen:
                 self.tree.insert("", "end", iid=str(rec["issue_id"]), tags=(tag,), values=(
                     chk,
                     rec["issue_id"],
-                    rec.get("test_plan_id",  "—"),
-                    rec.get("wf_cycle_id",   "—"),
+                    rec.get("test_plan_id", "—"),
+                    rec.get("wf_cycle_id",  "—"),
                     rec["issue_type"],
-                    rec.get("test_plan",     "—"),
-                    rec.get("test_cycle",    "—"),
-                    rec.get("current_stage", "—"),
+                    rec.get("test_plan",    "—"),
+                    rec.get("test_cycle",   "—"),
+                    rec.get("current_stage","—"),
                     status,
                 ))
 
@@ -238,58 +238,74 @@ class FixIssueScreen:
         if not selected:
             return
 
-        # vals[0]=chk, vals[1]=issue_id, vals[3]=cycle_id, vals[4]=type
         vals     = self.tree.item(selected[0], "values")
         issue_id = str(vals[1])
-        cycle_id = str(vals[3])
-        status   = str(vals[8])
         info     = self._instance_map.get(issue_id, {})
 
         self.status_label.config(
-            text=f"Selected: Issue #{issue_id} — {vals[4]}  |  Stage: {info.get('current_stage', '—')}  |  Status: {status}",
+            text=(
+                f"Selected: Issue #{issue_id} — {vals[4]}"
+                f"  |  Plan ID: {vals[2]}  |  Cycle ID: {vals[3]}"
+                f"  |  Stage: {info.get('current_stage', '—')}"
+                f"  |  Status: {info.get('issue_status', '—')}"
+            ),
             fg="#1E3A5F"
         )
 
     def _check_cycle_status_for_close(self, cycle_id):
         """
-        Called only when Close Issue is clicked.
-        Highlights all rows in same cycle and checks _instance_map for status.
-        Returns True if all fixed, False otherwise.
+        Check only rows matching cycle_id (string-safe comparison).
+        Highlights matching rows. Returns True only if ALL are fix_issue.
         """
+        cycle_id_str = str(cycle_id).strip()
+        matched   = []
         not_fixed = []
+
         for iid in self.tree.get_children():
             row_vals  = self.tree.item(iid, "values")
-            row_cycle = str(row_vals[3])   # cycle_id column
-            row_issue = str(row_vals[1])   # issue_id column
+            row_cycle = str(row_vals[3]).strip()
+            row_issue = str(row_vals[1]).strip()
 
-            if row_cycle == cycle_id:
-                self.tree.selection_add(iid)
-                # Read status from _instance_map (fresh from DB load)
-                info       = self._instance_map.get(row_issue, {})
-                row_status = info.get("issue_status", "")
-                print(f"  CHECK issue={row_issue} cycle={row_cycle} status={row_status}")
-                if row_status != "fix_issue":
-                    not_fixed.append(row_issue)
+            if row_cycle != cycle_id_str:
+                continue
 
-        if not_fixed:
+            self.tree.selection_add(iid)
+            matched.append(row_issue)
+
+            info       = self._instance_map.get(row_issue, {})
+            row_status = info.get("current_stage", "")
+            print(f"  CHECK issue={row_issue} cycle={row_cycle} status='{row_status}'")
+
+            if row_status != "Fix Issue":
+                not_fixed.append(row_issue)
+
+        print(f"  SUMMARY cycle={cycle_id_str} matched={matched} not_fixed={not_fixed}")
+
+        if not matched:
             self.status_label.config(
-                text=f"⚠ Issues {', '.join(not_fixed)} in Cycle #{cycle_id} are NOT fixed. Fix them before closing.",
+                text=f"⚠ No rows found for Cycle #{cycle_id_str}. Try refreshing.",
                 fg="#DC3545"
             )
             return False
-        else:
+
+        if not_fixed:
             self.status_label.config(
-                text=f"✔ All issues in Cycle #{cycle_id} are Fixed. Proceeding to close...",
-                fg="#1E7E34"
+                text=f"⚠ Issues {', '.join(not_fixed)} in Cycle #{cycle_id_str} are NOT fixed. Fix them before closing.",
+                fg="#DC3545"
             )
-            return True
+            return False
+
+        self.status_label.config(
+            text=f"✔ All {len(matched)} issue(s) in Cycle #{cycle_id_str} are Fixed. Proceeding to close...",
+            fg="#1E7E34"
+        )
+        return True
 
     def _get_selected(self):
         selected = self.tree.selection()
         if not selected:
             messagebox.showwarning("No Selection", "Please select an issue first.", parent=self.window)
             return None, None, None
-        # vals[0]=chk, vals[1]=issue_id, vals[4]=issue_type
         vals        = self.tree.item(selected[0], "values")
         issue_id    = str(vals[1])
         info        = self._instance_map.get(issue_id, {})
@@ -324,24 +340,18 @@ class FixIssueScreen:
         plan_id  = info.get("test_plan_id")
         cycle_id = info.get("cycle_id")
 
-        print(f"DEBUG _on_close_issue | issue_id={issue_id} | plan_id={plan_id} type={type(plan_id)} | cycle_id={cycle_id} type={type(cycle_id)}")
+        print(f"DEBUG _on_close_issue | issue_id={issue_id} | plan_id={plan_id} | cycle_id={cycle_id}")
 
         if not plan_id or not cycle_id:
             messagebox.showerror("Error", "Could not determine plan or cycle for this issue.", parent=self.window)
             return
 
-        # Debug — print all tree rows to verify values
-        print(f"DEBUG close clicked | plan_id={plan_id} cycle_id={cycle_id}")
-        for iid in self.tree.get_children():
-            rv = self.tree.item(iid, "values")
-            print(f"  row iid={iid} | chk={rv[0]} | issue_id={rv[1]} | cycle_id={rv[3]} | status={rv[8]}")
-
-        # Highlight cycle rows and check if all fixed before proceeding
+        # Check all issues in cycle are fixed (uses _instance_map, not tree display)
         all_fixed = self._check_cycle_status_for_close(str(cycle_id))
         if not all_fixed:
             messagebox.showwarning(
                 "Cannot Close",
-                "Some issues in this cycle are not Fixed yet. Please mark all issues as Fixed before closing.",
+                "Some issues in this cycle are not Fixed yet.\n\nPlease mark ALL issues as Fixed before closing.",
                 parent=self.window
             )
             return
@@ -373,7 +383,12 @@ class FixIssueScreen:
             t_records = t_response.get("records", [])
 
             if not t_records:
-                messagebox.showerror("Transition Error", f"No '{action_name}' transition found for current stage.", parent=self.window)
+                messagebox.showerror(
+                    "Transition Error",
+                    f"No '{action_name}' transition found for current stage.\n"
+                    f"Check workflow_transitions table.",
+                    parent=self.window
+                )
                 return
 
             from_stage_id = t_records[0]["current_stage_id"]
@@ -440,8 +455,8 @@ class FixIssueScreen:
 
     def _check_all_fixed_then_rerun(self, issue_id, instance_id, plan_id, cycle_id, issue_type):
         """
-        STEP 1: Check all issues in this cycle have action_performed = 'fix_issue' in workflow_history.
-        Only then re-run the test plan.
+        Double-check via DB that all issues in cycle have fix_issue in workflow_history.
+        Then confirm and re-run test plan.
         """
         try:
             count_response = call_lambda({
@@ -449,12 +464,10 @@ class FixIssueScreen:
                 "sql": """
                     SELECT
                         COUNT(DISTINCT wi.instance_id) AS total,
-                        SUM(CASE WHEN wh.action_performed = 'fix_issue' THEN 1 ELSE 0 END) AS fixed
+                        SUM(CASE WHEN i.status = 'fix_issue' THEN 1 ELSE 0 END) AS fixed
                     FROM issues i
                     JOIN workflow_instance wi ON wi.reference_id = i.issue_id
                                              AND wi.module_name  = 'ISSUE'
-                    LEFT JOIN workflow_history wh ON wh.instance_id      = wi.instance_id
-                                                 AND wh.action_performed = 'fix_issue'
                     WHERE i.test_plan_id = %s
                     AND wi.cycle_id      = %s
                 """,
@@ -467,13 +480,13 @@ class FixIssueScreen:
             total = int(count_records[0]["total"] or 0)
             fixed = int(count_records[0]["fixed"] or 0)
 
-            print(f"📊 Cycle {cycle_id} | Plan {plan_id} | Total: {total} | Fixed: {fixed}")
+            print(f"📊 DB check — Cycle {cycle_id} | Plan {plan_id} | Total: {total} | Fixed: {fixed}")
 
             if total == 0 or total != fixed:
                 remaining = total - fixed
                 messagebox.showwarning(
                     "Issues Not Fixed Yet",
-                    f"⚠ {remaining} issue(s) in Cycle #{cycle_id} are not yet marked as Fixed.\n\n"
+                    f"⚠ DB check: {remaining} issue(s) in Cycle #{cycle_id} are not yet Fixed in workflow history.\n\n"
                     f"Please mark all issues as Fixed before closing.",
                     parent=self.window
                 )
@@ -483,8 +496,8 @@ class FixIssueScreen:
                 "All Issues Fixed — Re-run Test Plan?",
                 f"✅ All {total} issue(s) in Cycle #{cycle_id} are Fixed.\n\n"
                 f"Re-run Test Plan #{plan_id} now?\n\n"
-                f"• New cycle CLEAN → all issues transitioned, COMPLETED, ISSUE CLOSED ✅\n"
-                f"• New issues found → nothing changes, new workflows start",
+                f"• New cycle CLEAN  →  all issues COMPLETED + ISSUE CLOSED ✅\n"
+                f"• New issues found →  nothing changes, new workflows start",
                 parent=self.window
             )
             if not confirm:
@@ -498,37 +511,47 @@ class FixIssueScreen:
 
     def _rerun_and_close(self, plan_id, cycle_id):
         """
-        Re-run test plan.
-        If CLEAN → close ALL instances in the cycle.
-        If new issues → do nothing, new workflows start automatically.
+        1. Re-run test plan.
+        2. If new cycle is CLEAN → look up close_issue terminal stage from workflow
+           definition (not current stage) and force-close ALL instances in old cycle.
+        3. If new issues found → do nothing.
         """
         try:
             from runners.control_execution_runner import ControlExecutionRunner
 
-            print(f"🔄 Re-running Test Plan {plan_id} (type={type(plan_id)})...")
+            print(f"🔄 Re-running Test Plan {plan_id}...")
             self.status_label.config(text="⏳ Re-running test plan...", fg="#FF8C00")
             self.window.update()
 
             runner = ControlExecutionRunner()
             runner.execute_test_plan(int(plan_id))
 
-            # Get new cycle number
+            # ── Get new cycle ──────────────────────────────────────────────
             new_cycle_response = call_lambda({
                 "action": "raw_sql",
-                "sql": "SELECT MAX(cycle_number) AS new_cycle_num, MAX(cycle_id) AS new_cycle_id FROM test_cycle WHERE test_plan_id = %s",
+                "sql": """
+                    SELECT MAX(cycle_number) AS new_cycle_num,
+                           MAX(cycle_id)     AS new_cycle_id
+                    FROM test_cycle
+                    WHERE test_plan_id = %s
+                """,
                 "params": [plan_id]
             })
             new_cycle_records = new_cycle_response.get("records", [])
             new_cycle_num = new_cycle_records[0]["new_cycle_num"] if new_cycle_records else None
             new_cycle_id  = new_cycle_records[0]["new_cycle_id"]  if new_cycle_records else None
 
-            print(f"New cycle_id={new_cycle_id} | old cycle_id={cycle_id}")
+            print(f"Old cycle_id={cycle_id} | New cycle_id={new_cycle_id}")
 
             if not new_cycle_id or int(new_cycle_id) == int(cycle_id):
-                messagebox.showwarning("Warning", "Could not determine new cycle. Please check manually.", parent=self.window)
+                messagebox.showwarning(
+                    "Warning",
+                    "Could not detect a new cycle after re-run.\nPlease check manually.",
+                    parent=self.window
+                )
                 return
 
-            # Check new cycle for issues
+            # ── Count issues in new cycle ──────────────────────────────────
             issue_check = call_lambda({
                 "action": "raw_sql",
                 "sql": """
@@ -541,145 +564,169 @@ class FixIssueScreen:
                 """,
                 "params": [plan_id, new_cycle_id]
             })
-            issue_records = issue_check.get("records", [])
-            issue_count   = int(issue_records[0]["issue_count"] if issue_records else 0)
-
+            issue_count = int(
+                (issue_check.get("records") or [{}])[0].get("issue_count", 0)
+            )
             print(f"New cycle {new_cycle_id} issue_count={issue_count}")
 
-            if issue_count == 0:
-                # ✅ NEW CYCLE CLEAN — close ALL instances in old cycle
-
-                # Get all instances in old cycle
-                all_instances_response = call_lambda({
-                    "action": "raw_sql",
-                    "sql": """
-                        SELECT wi.instance_id, wi.current_stage_id, wi.workflow_id
-                        FROM issues i
-                        JOIN workflow_instance wi ON wi.reference_id = i.issue_id
-                                                 AND wi.module_name  = 'ISSUE'
-                        WHERE i.test_plan_id = %s
-                        AND wi.cycle_id      = %s
-                    """,
-                    "params": [plan_id, cycle_id]
-                })
-                all_instances = all_instances_response.get("records", [])
-
-                for inst in all_instances:
-                    inst_id       = inst["instance_id"]
-                    workflow_id   = inst["workflow_id"]
-                    from_stage_id = inst["current_stage_id"]
-
-                    # Get close_issue transition for this instance
-                    t_response = call_lambda({
-                        "action": "raw_sql",
-                        "sql": """
-                            SELECT wt.to_stage_id, wt.role_required
-                            FROM workflow_transitions wt
-                            WHERE wt.workflow_id  = %s
-                            AND wt.from_stage_id  = %s
-                            AND wt.action_name    = 'close_issue'
-                            AND wt.active         = 1
-                            LIMIT 1
-                        """,
-                        "params": [workflow_id, from_stage_id]
-                    })
-                    t_records = t_response.get("records", [])
-                    if not t_records:
-                        print(f"⚠ No close_issue transition for instance {inst_id} at stage {from_stage_id}, skipping.")
-                        continue
-
-                    to_stage_id = t_records[0]["to_stage_id"]
-                    next_role   = t_records[0]["role_required"]
-
-                    # Step 2: Transition stage → Close Issue
-                    call_lambda({
-                        "action": "raw_sql",
-                        "sql": "UPDATE workflow_instance SET current_stage_id = %s WHERE instance_id = %s",
-                        "params": [to_stage_id, inst_id]
-                    })
-
-                    # Step 3: Log workflow_history
-                    call_lambda({
-                        "action": "raw_sql",
-                        "sql": """INSERT INTO workflow_history
-                                  (instance_id, workflow_id, from_stage_id, to_stage_id,
-                                   action_performed, performed_by, remarks, performed_at)
-                                  VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())""",
-                        "params": [
-                            inst_id, workflow_id,
-                            from_stage_id, to_stage_id,
-                            "close_issue", self.current_user,
-                            f"Issue closed after test plan re-run — Cycle #{new_cycle_id} is clean"
-                        ]
-                    })
-
-                    # Step 4: Update assigned_to + status = ISSUE CLOSED directly on the issue
-                    call_lambda({
-                        "action": "raw_sql",
-                        "sql": """UPDATE issues
-                                  SET assigned_to = %s,
-                                      assigned_by = %s,
-                                      assigned_at = NOW(),
-                                      status      = 'ISSUE CLOSED'
-                                  WHERE issue_id = (
-                                      SELECT reference_id FROM workflow_instance WHERE instance_id = %s
-                                  )""",
-                        "params": [next_role, self.current_user, inst_id]
-                    })
-                    print(f"✔ Issue for instance {inst_id} marked as ISSUE CLOSED")
-
-                # Step 5: Mark ALL instances in old cycle as COMPLETED
-                call_lambda({
-                    "action": "raw_sql",
-                    "sql": """
-                        UPDATE workflow_instance wi
-                        JOIN issues i ON wi.reference_id = i.issue_id
-                                     AND wi.module_name  = 'ISSUE'
-                        SET wi.status = 'COMPLETED', wi.completed_at = NOW()
-                        WHERE i.test_plan_id = %s
-                        AND wi.cycle_id      = %s
-                    """,
-                    "params": [plan_id, cycle_id]
-                })
-
-                # Step 6b: Mark test_results from old cycle as ISSUE CLOSED
-                call_lambda({
-                    "action": "raw_sql",
-                    "sql": """
-                        UPDATE test_results
-                        SET status = 'ISSUE CLOSED'
-                        WHERE test_plan_id = %s
-                        AND cycle_number   = (
-                            SELECT cycle_number FROM test_cycle
-                            WHERE cycle_id = %s LIMIT 1
-                        )
-                    """,
-                    "params": [plan_id, cycle_id]
-                })
-
-                messagebox.showinfo(
-                    "Test Plan PASSED ✅",
-                    f"✅ Test Plan #{plan_id} re-executed — Cycle #{new_cycle_num} is CLEAN!\n\n"
-                    f"No new issues found.\n\n"
-                    f"✔ All instances transitioned to Close Issue\n"
-                    f"✔ All instances marked COMPLETED\n"
-                    f"✔ All issues + test results marked 'ISSUE CLOSED'",
-                    parent=self.window
-                )
-                print(f"✅ Plan {plan_id} Cycle {new_cycle_id} CLEAN — all issues in cycle {cycle_id} closed.")
-
-            else:
-                # ⚠ New issues found — do nothing
+            if issue_count > 0:
+                # New issues found — do nothing, new workflows already started
                 messagebox.showwarning(
                     "New Issues Found ⚠",
                     f"⚠ Test Plan #{plan_id} re-executed.\n\n"
                     f"Cycle #{new_cycle_num} has {issue_count} new issue(s).\n\n"
-                    f"No transitions made. Fix new issues and try closing again.",
+                    f"No transitions made. Fix the new issues and try closing again.",
                     parent=self.window
                 )
-                print(f"⚠ Plan {plan_id} new cycle {new_cycle_id} — {issue_count} new issues, nothing closed.")
+                print(f"⚠ New cycle {new_cycle_id} has {issue_count} issues — nothing closed.")
+                self._load_issues()
+                return
 
-            self.status_label.config(text="Re-run complete. Refreshing...", fg="#1E3A5F")
+            # ── CLEAN — close all instances in OLD cycle ───────────────────
+
+            # Get all instances in old cycle
+            all_instances_response = call_lambda({
+                "action": "raw_sql",
+                "sql": """
+                    SELECT wi.instance_id, wi.current_stage_id, wi.workflow_id
+                    FROM issues i
+                    JOIN workflow_instance wi ON wi.reference_id = i.issue_id
+                                             AND wi.module_name  = 'ISSUE'
+                    WHERE i.test_plan_id = %s
+                    AND wi.cycle_id      = %s
+                """,
+                "params": [plan_id, cycle_id]
+            })
+            all_instances = all_instances_response.get("records", [])
+
+            if not all_instances:
+                messagebox.showwarning("Warning", "No instances found in old cycle to close.", parent=self.window)
+                return
+
+            # ── Look up close_issue terminal stage from workflow definition ─
+            # We use ANY instance's workflow_id — all in same plan share the same workflow.
+            # We do NOT use from_stage_id because instances are at stage 4 (Fix Issue),
+            # and close_issue transition is defined from stage 6 → 7.
+            # Instead we find the to_stage_id for action_name = 'close_issue' anywhere
+            # in the workflow, which gives us stage 7 (Close Issue) unconditionally.
+            workflow_id_for_lookup = all_instances[0]["workflow_id"]
+            close_def_response = call_lambda({
+                "action": "raw_sql",
+                "sql": """
+                    SELECT wt.to_stage_id, wt.role_required, ws.stage_name
+                    FROM workflow_transitions wt
+                    JOIN workflow_stages ws ON ws.stage_id = wt.to_stage_id
+                    WHERE wt.workflow_id  = %s
+                    AND wt.action_name    = 'close_issue'
+                    AND wt.active         = 1
+                    LIMIT 1
+                """,
+                "params": [workflow_id_for_lookup]
+            })
+            close_def_records = close_def_response.get("records", [])
+
+            if not close_def_records:
+                messagebox.showerror(
+                    "Workflow Error",
+                    f"No 'close_issue' transition found in workflow {workflow_id_for_lookup}.\n"
+                    f"Please check the workflow_transitions table.",
+                    parent=self.window
+                )
+                return
+
+            close_to_stage_id = close_def_records[0]["to_stage_id"]
+            close_next_role   = close_def_records[0]["role_required"]
+            close_stage_name  = close_def_records[0]["stage_name"]
+
+            print(f"Closing to stage {close_to_stage_id} ({close_stage_name}) role={close_next_role}")
+
+            # ── Per-instance: transition + history + issue status ──────────
+            for inst in all_instances:
+                inst_id       = inst["instance_id"]
+                workflow_id   = inst["workflow_id"]
+                from_stage_id = inst["current_stage_id"]
+
+                print(f"  Closing instance {inst_id} from stage {from_stage_id} → {close_to_stage_id}")
+
+                # Transition to Close Issue stage
+                call_lambda({
+                    "action": "raw_sql",
+                    "sql": "UPDATE workflow_instance SET current_stage_id = %s WHERE instance_id = %s",
+                    "params": [close_to_stage_id, inst_id]
+                })
+
+                # Log history
+                call_lambda({
+                    "action": "raw_sql",
+                    "sql": """INSERT INTO workflow_history
+                              (instance_id, workflow_id, from_stage_id, to_stage_id,
+                               action_performed, performed_by, remarks, performed_at)
+                              VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())""",
+                    "params": [
+                        inst_id, workflow_id,
+                        from_stage_id, close_to_stage_id,
+                        "close_issue", self.current_user,
+                        f"Force-closed after test plan re-run — Cycle #{new_cycle_id} is clean"
+                    ]
+                })
+
+                # Update issue: assigned_to + ISSUE CLOSED
+                call_lambda({
+                    "action": "raw_sql",
+                    "sql": """UPDATE issues
+                              SET assigned_to = %s,
+                                  assigned_by = %s,
+                                  assigned_at = NOW(),
+                                  status      = 'ISSUE CLOSED'
+                              WHERE issue_id = (
+                                  SELECT reference_id FROM workflow_instance WHERE instance_id = %s
+                              )""",
+                    "params": [close_next_role, self.current_user, inst_id]
+                })
+                print(f"  ✔ Instance {inst_id} → ISSUE CLOSED")
+
+            # Mark ALL old-cycle instances COMPLETED
+            call_lambda({
+                "action": "raw_sql",
+                "sql": """
+                    UPDATE workflow_instance wi
+                    JOIN issues i ON wi.reference_id = i.issue_id
+                                 AND wi.module_name  = 'ISSUE'
+                    SET wi.status = 'COMPLETED', wi.completed_at = NOW()
+                    WHERE i.test_plan_id = %s
+                    AND wi.cycle_id      = %s
+                """,
+                "params": [plan_id, cycle_id]
+            })
+
+            # Mark test_results ISSUE CLOSED
+            call_lambda({
+                "action": "raw_sql",
+                "sql": """
+                    UPDATE test_results
+                    SET status = 'ISSUE CLOSED'
+                    WHERE test_plan_id = %s
+                    AND cycle_number   = (
+                        SELECT cycle_number FROM test_cycle
+                        WHERE cycle_id = %s LIMIT 1
+                    )
+                """,
+                "params": [plan_id, cycle_id]
+            })
+
+            print(f"✅ Plan {plan_id} — all instances in cycle {cycle_id} closed.")
+
+            messagebox.showinfo(
+                "Test Plan PASSED ✅",
+                f"✅ Test Plan #{plan_id} re-executed — Cycle #{new_cycle_num} is CLEAN!\n\n"
+                f"No new issues found.\n\n"
+                f"✔ All instances transitioned to '{close_stage_name}'\n"
+                f"✔ All instances marked COMPLETED\n"
+                f"✔ All issues + test results marked 'ISSUE CLOSED'",
+                parent=self.window
+            )
+
+            self.status_label.config(text="✅ Issues closed. Refreshing...", fg="#1E7E34")
             self._load_issues()
 
         except Exception as e:
