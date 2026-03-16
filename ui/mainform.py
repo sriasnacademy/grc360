@@ -13,12 +13,14 @@ from ui.rag_bulk_ui import MainUI
 from ui.overalldata import GRCUISkeleton
 from ui.main_bedrock_guardrail_ui import open_guardrail_window
 from services.email_service import send_stage_notification
-from ui.Dashboards.process_dashboard    import open_process_dashboard
-from ui.Dashboards.subprocess_dashboard import open_subprocess_dashboard
-from ui.Dashboards.control_dashboard    import open_control_dashboard
-from ui.Dashboards.risk_dashboard       import open_risk_dashboard
-from ui.accept_issue import AcceptIssueScreen
-from ui.fix_issue import FixIssueScreen
+from ui.Dashboards.process_dashboard      import open_process_dashboard
+from ui.Dashboards.subprocess_dashboard   import open_subprocess_dashboard
+from ui.Dashboards.control_dashboard      import open_control_dashboard
+from ui.Dashboards.risk_dashboard         import open_risk_dashboard
+from ui.Dashboards.test_plan_dashboard    import open_test_plan_dashboard
+from ui.Dashboards.test_steps_dashboard   import open_test_steps_dashboard
+from ui.Dashboards.test_results_dashboard import open_test_results_dashboard
+
 agent = IntentAgent()
 
 # ─────────────────────────────────────────────
@@ -185,7 +187,7 @@ class GRC360ChatModel:
         tk.Frame(body, bg=CLR["card_border"], height=1).pack(
             fill="x", padx=14, pady=(0, 12))
 
-        # ── 📊 DASHBOARDS ─────────────────────
+        # ── 📊 DASHBOARDS ──────────────────────
         tk.Label(body, text="📊  DASHBOARDS",
                  bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"],
                  font=FT["section"]).pack(anchor="w", padx=14, pady=(0, 8))
@@ -195,28 +197,49 @@ class GRC360ChatModel:
                  subtitle="Metrics · Table · Charts",
                  accent="#2563EB",
                  command=Process_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
+                 ).pack(fill="x", padx=10, pady=(0, 4))
 
         DashTile(body,
                  icon="🔀", title="Subprocess Dashboard",
                  subtitle="Status · Dept · Frequency",
                  accent="#0EA5E9",
                  command=SubProcess_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
+                 ).pack(fill="x", padx=10, pady=(0, 4))
 
         DashTile(body,
                  icon="⚠️", title="Risk Dashboard",
                  subtitle="Severity · Likelihood · Owner",
                  accent="#F97316",
                  command=Risk_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
+                 ).pack(fill="x", padx=10, pady=(0, 4))
 
         DashTile(body,
                  icon="🛡️", title="Control Dashboard",
                  subtitle="Type · Category · Status",
                  accent="#10B981",
                  command=Control_Dashboard_Screen,
-                 ).pack(fill="x", padx=10, pady=(0, 5))
+                 ).pack(fill="x", padx=10, pady=(0, 4))
+
+        DashTile(body,
+                 icon="📋", title="Test Plan Dashboard",
+                 subtitle="Plans · Modules · Authors",
+                 accent="#7C3AED",
+                 command=Test_Plan_Dashboard_Screen,
+                 ).pack(fill="x", padx=10, pady=(0, 4))
+
+        DashTile(body,
+                 icon="🔬", title="Test Steps Dashboard",
+                 subtitle="Pass/Fail · Areas · Heatmap",
+                 accent="#14B8A6",
+                 command=Test_Steps_Dashboard_Screen,
+                 ).pack(fill="x", padx=10, pady=(0, 4))
+
+        DashTile(body,
+                 icon="📊", title="Test Results Dashboard",
+                 subtitle="Results · Plans · Steps · Pass Rate",
+                 accent="#2563EB",
+                 command=Test_Results_Dashboard_Screen,
+                 ).pack(fill="x", padx=10, pady=(0, 4))
 
         # ── Status labels ──
         self.intent_label = tk.Label(
@@ -381,22 +404,19 @@ def View_Process_Screen():         open_view_process_screen(tk.Toplevel())
 def Create_Risk_Screen():          risk(tk.Toplevel())
 def Create_SubProcess():           create_subporcess(tk.Toplevel())
 def open_main_bedrock_guardrail(): open_guardrail_window(tk.Toplevel())
-def Test_Execution() :
+def Test_Execution():
     root = tk.Toplevel(); ControlReportGUI(root)
 def send_email():
     send_stage_notification("ssmiley120@gmail.com", "Something", 1, "First", "NONE")
 
-def Process_Dashboard_Screen():    open_process_dashboard(tk.Toplevel())
-def SubProcess_Dashboard_Screen(): open_subprocess_dashboard(tk.Toplevel())
-def Risk_Dashboard_Screen():       open_risk_dashboard(tk.Toplevel())
-def Control_Dashboard_Screen():    open_control_dashboard(tk.Toplevel())
-def Accept_Issue():
-    root = tk.Toplevel()
-    AcceptIssueScreen(root, "MANAGER", "siri123")
-    
-def Fix_Issue():
-    root = tk.Toplevel()
-    FixIssueScreen(root, "OWNER", "siri123")
+def Process_Dashboard_Screen():       open_process_dashboard(tk.Toplevel())
+def SubProcess_Dashboard_Screen():    open_subprocess_dashboard(tk.Toplevel())
+def Risk_Dashboard_Screen():          open_risk_dashboard(tk.Toplevel())
+def Control_Dashboard_Screen():       open_control_dashboard(tk.Toplevel())
+def Test_Plan_Dashboard_Screen():     open_test_plan_dashboard(tk.Toplevel())
+def Test_Steps_Dashboard_Screen():    open_test_steps_dashboard(tk.Toplevel())
+def Test_Results_Dashboard_Screen():  open_test_results_dashboard(tk.Toplevel())
+
 
 # ─────────────────────────────────────────────
 #  MAIN FORM
@@ -404,8 +424,8 @@ def Fix_Issue():
 def start_main_form():
     root = tk.Tk()
     root.title("GRC_360")
-    root.geometry("900x600")
-    root.minsize(800, 560)
+    root.geometry("900x700")
+    root.minsize(800, 640)
     root.configure(bg=CLR["app_bg"])
 
     menubar = Menu(root, bg="#FFFFFF", fg="#1E293B",
@@ -433,11 +453,14 @@ def start_main_form():
                                ("Risk Dashboard",                 Risk_Dashboard_Screen)])
     make_menu("Control",     [("Create Control",                 Create_Control_Screen),
                                ("Control Dashboard",              Control_Dashboard_Screen)])
-    make_menu("Test",        [("Test Execution",                 Test_Execution)])
+    make_menu("Test",        [("Test Execution",                 Test_Execution),
+                               ("Test Plan Dashboard",            Test_Plan_Dashboard_Screen),
+                               ("Test Steps Dashboard",           Test_Steps_Dashboard_Screen),
+                               ("Test Results Dashboard",         Test_Results_Dashboard_Screen)])
     make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess),
                                ("Subprocess Dashboard",           SubProcess_Dashboard_Screen)])
-    make_menu("Workflow", [("Accept and Assign Issue", Accept_Issue),
-                       ("Fix Issue",     Fix_Issue)])
+    make_menu("Workflow",    [("Approve Issue",                  Create_SubProcess),
+                               ("Fix Issue",                      Create_SubProcess)])
     root.config(menu=menubar)
 
     workspace = tk.Frame(root, bg=CLR["app_bg"])
