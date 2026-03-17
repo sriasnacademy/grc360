@@ -20,6 +20,8 @@ from ui.Dashboards.risk_dashboard         import open_risk_dashboard
 from ui.Dashboards.test_plan_dashboard    import open_test_plan_dashboard
 from ui.Dashboards.test_steps_dashboard   import open_test_steps_dashboard
 from ui.Dashboards.test_results_dashboard import open_test_results_dashboard
+from ui.accept_issue import AcceptIssueScreen
+from ui.fix_issue import FixIssueScreen
 
 agent = IntentAgent()
 
@@ -416,7 +418,13 @@ def Control_Dashboard_Screen():       open_control_dashboard(tk.Toplevel())
 def Test_Plan_Dashboard_Screen():     open_test_plan_dashboard(tk.Toplevel())
 def Test_Steps_Dashboard_Screen():    open_test_steps_dashboard(tk.Toplevel())
 def Test_Results_Dashboard_Screen():  open_test_results_dashboard(tk.Toplevel())
-
+def Accept_Issue():
+    root = tk.Toplevel()
+    AcceptIssueScreen(root, "MANAGER", "siri123")
+    
+def Fix_Issue():
+    root = tk.Toplevel()
+    FixIssueScreen(root, "OWNER", "siri123")
 
 # ─────────────────────────────────────────────
 #  MAIN FORM
@@ -459,8 +467,8 @@ def start_main_form():
                                ("Test Results Dashboard",         Test_Results_Dashboard_Screen)])
     make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess),
                                ("Subprocess Dashboard",           SubProcess_Dashboard_Screen)])
-    make_menu("Workflow",    [("Approve Issue",                  Create_SubProcess),
-                               ("Fix Issue",                      Create_SubProcess)])
+    make_menu("Workflow",    [("Accept and Assign Issue",                  Accept_Issue),
+                               ("Fix Issue",                      Fix_Issue)])
     root.config(menu=menubar)
 
     workspace = tk.Frame(root, bg=CLR["app_bg"])

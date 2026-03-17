@@ -464,14 +464,17 @@ class FixIssueScreen:
                 "sql": """
                     SELECT
                         COUNT(DISTINCT wi.instance_id) AS total,
-                        SUM(CASE WHEN i.status = 'fix_issue' THEN 1 ELSE 0 END) AS fixed
+                        SUM(CASE WHEN wh.action_performed = 'fix_issue' THEN 1 ELSE 0 END) AS fixed
                     FROM issues i
                     JOIN workflow_instance wi ON wi.reference_id = i.issue_id
                                              AND wi.module_name  = 'ISSUE'
+                    LEFT JOIN workflow_history wh ON wh.instance_id      = wi.instance_id
+                                                 AND wh.action_performed = 'fix_issue'
                     WHERE i.test_plan_id = %s
                     AND wi.cycle_id      = %s
+                    AND i.assigned_to    = %s
                 """,
-                "params": [plan_id, cycle_id]
+                "params": [plan_id, cycle_id, self.current_user_role]
             })
             count_records = count_response.get("records", [])
             if not count_records:
@@ -677,7 +680,7 @@ class FixIssueScreen:
                               SET assigned_to = %s,
                                   assigned_by = %s,
                                   assigned_at = NOW(),
-                                  status      = 'ISSUE CLOSED'
+                                  status      = 'CLOSED'
                               WHERE issue_id = (
                                   SELECT reference_id FROM workflow_instance WHERE instance_id = %s
                               )""",
