@@ -91,5 +91,28 @@ Status: {data.get('stauts')}
         }
     }
          
+    elif entity_type == "PROCESS_SUBPROCESS_LINK":
+        return {
+            "rag_text": f"""
+Process-Subprocess Link
+Process ID: {data.get('process_id')}
+Process Name: {data.get('process_name')}
+Process Description: {data.get('process_description')}
+Process Department: {data.get('process_department')}
+Sub-Process ID: {data.get('sub_process_id')}
+Sub-Process Name: {data.get('sub_process_name')}
+Sub-Process Description: {data.get('sub_process_description')}
+Sub-Process Department: {data.get('sub_process_department')}
+Sub-Process Owner: {data.get('sub_process_owner')}
+""".strip(),
+            "source_table": "process_subprocess_map",
+            "metadata": {
+                "process_id":      data.get("process_id"),
+                "process_name":    data.get("process_name"),
+                "sub_process_id":  data.get("sub_process_id"),
+                "sub_process_name": data.get("sub_process_name"),
+            }
+        }
+
     else:
         raise ValueError(f"Unsupported entity type: {entity_type}")
