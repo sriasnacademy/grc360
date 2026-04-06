@@ -1,5 +1,6 @@
 from connectors.lambda_mysql import call_lambda
 from models.my_llm_client import LLMClient
+from services.rag_service import save_process_to_rag
 
 
 # ------------------------------------------------
@@ -86,14 +87,47 @@ def link_process_subprocess(prompt: str):
     if not process_id or not sub_process_id:
         return "❌ Unable to resolve Process or Sub-process using LLM"
 
-    call_lambda({
+    result = call_lambda({
         "action": "insert",
         "table": "process_subprocess_map",
         "data": {
-            "process_id": process_id,
+            "process_id":     process_id,
             "sub_process_id": sub_process_id
         }
     })
+
+    map_id = result.get("inserted_id")
+
+    # ── Enrich with names for meaningful RAG text ─────────────
+    rag_data = {
+        "process_id":    process_id,
+        "sub_process_id": sub_process_id,
+        "process_name":          "",
+        "process_description":   "",
+        "process_department":    "",
+        "sub_process_name":        "",
+        "sub_process_description": "",
+        "sub_process_department":  "",
+        "sub_process_owner":       "",
+    }
+
+    for rec in processes:
+        if rec.get("process_id") == process_id:
+            rag_data["process_name"]        = rec.get("process_name", "")
+            rag_data["process_description"] = rec.get("description",  "")
+            rag_data["process_department"]  = rec.get("department",   "")
+            break
+
+    for rec in subprocesses:
+        if rec.get("sub_process_id") == sub_process_id:
+            rag_data["sub_process_name"]        = rec.get("sub_process_name", "")
+            rag_data["sub_process_description"] = rec.get("description",      "")
+            rag_data["sub_process_department"]  = rec.get("department",       "")
+            rag_data["sub_process_owner"]       = rec.get("sub_process_owner","")
+            break
+
+    # ── Save to RAG (pgvector) ────────────────────────────────
+    save_process_to_rag("PROCESS_SUBPROCESS_LINK", rag_data, map_id)
 
     return "✅ Sub-process linked to Process using Groq LLM"
 
