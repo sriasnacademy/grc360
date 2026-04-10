@@ -1,8 +1,10 @@
 """
-GRC360 — Test Plan Dashboard  (Clean Edition)
-Table : test_plan
-Place : ui/Dashboards/test_plan_dashboard.py
-Launch: open_test_plan_dashboard(tk.Toplevel())
+GRC360 — Test Plan Report Dashboard  (Enhanced Edition)
+• Quantitative Analytics panel on the right
+• Module / Status / Author breakdowns with %
+• Rich detail panel with scrollable full record
+Place in: ui/Dashboards/test_plan_dashboard.py
+Call:     open_test_plan_dashboard(tk.Toplevel())
 """
 
 import sys, os
@@ -19,33 +21,47 @@ TABLE   = "test_plan"
 COLUMNS = ["test_plan_id", "test_plan_name", "description",
            "module", "created_by", "created_date", "status"]
 
-# ── PALETTE ───────────────────────────────────────────────────
-BG     = "#F0F4F8"
-PANEL  = "#FFFFFF"
-HEADER = "#1E2A3A"
-BORDER = "#CBD5E1"
-ACC    = "#7C3AED"
-TEXT   = "#1E293B"
-DIM    = "#64748B"
-GREEN  = "#10B981"
-ROSE   = "#F43F5E"
-GOLD   = "#F59E0B"
-TEAL   = "#06B6D4"
-WHITE  = "#FFFFFF"
-REVE   = "#F8FAFC"
-
-STATUS_C = {
-    "active":      GREEN,
-    "inactive":    ROSE,
-    "draft":       DIM,
-    "completed":   TEAL,
-    "in progress": ACC,
-    "pending":     GOLD,
-    "approved":    TEAL,
-    "review":      GOLD,
+# ── PALETTE  (dark purple theme) ─────────────────────────────
+C = {
+    "bg":          "#0F0A1E",
+    "sidebar":     "#1A1030",
+    "card":        "#1E1538",
+    "card_border": "#3B2A6A",
+    "accent":      "#7C3AED",
+    "accent2":     "#A78BFA",
+    "success":     "#10B981",
+    "warning":     "#F59E0B",
+    "danger":      "#EF4444",
+    "teal":        "#06B6D4",
+    "rose":        "#F43F5E",
+    "text_main":   "#EDE9FE",
+    "text_dim":    "#8B7FC8",
+    "text_tiny":   "#4C3A7A",
+    "row_even":    "#0A071A",
+    "row_odd":     "#1E1538",
+    "row_select":  "#2D1B6E",
+    "input_bg":    "#1A1030",
+    "input_fg":    "#EDE9FE",
 }
 
-def sclr(s): return STATUS_C.get((s or "").lower(), DIM)
+STATUS_COLORS = {
+    "active":      "#10B981",
+    "inactive":    "#EF4444",
+    "draft":       "#8B7FC8",
+    "completed":   "#06B6D4",
+    "in progress": "#7C3AED",
+    "pending":     "#F59E0B",
+    "approved":    "#06B6D4",
+    "review":      "#F59E0B",
+}
+MODULE_COLORS = ["#7C3AED","#06B6D4","#10B981","#F59E0B","#EF4444","#F97316","#A78BFA","#38BDF8"]
+
+FONT_HEAD   = ("Segoe UI", 9,  "bold")
+FONT_CELL   = ("Segoe UI", 9)
+FONT_CARD_N = ("Segoe UI", 22, "bold")
+FONT_CARD_L = ("Segoe UI", 8)
+FONT_SECT   = ("Segoe UI", 8,  "bold")
+FONT_SEARCH = ("Segoe UI", 10)
 
 # ── DATA ──────────────────────────────────────────────────────
 def fetch_plans():
@@ -53,108 +69,209 @@ def fetch_plans():
     return r.get("records", [])
 
 
+def sclr(s): return STATUS_COLORS.get((s or "").lower(), C["text_dim"])
+
 # ── STAT CARD ─────────────────────────────────────────────────
 class StatCard(tk.Frame):
-    def __init__(self, parent, label, color, **kw):
-        super().__init__(parent, bg=PANEL,
-                         highlightbackground=color,
-                         highlightthickness=2, **kw)
-        self._color = color
-        self._val_lbl = tk.Label(self, text="0", bg=PANEL, fg=color,
-                                  font=("Segoe UI", 20, "bold"))
-        self._val_lbl.pack(pady=(10, 0))
-        tk.Label(self, text=label, bg=PANEL, fg=DIM,
-                 font=("Segoe UI", 8)).pack(pady=(0, 10))
-
-    def update_value(self, v):
-        self._val_lbl.config(text=str(v))
+    def __init__(self, parent, icon, label, value, accent, **kw):
+        super().__init__(parent, bg=C["card"],
+                         highlightbackground=accent, highlightthickness=1, **kw)
+        tk.Frame(self, bg=accent, height=3).pack(side="bottom", fill="x")
+        inner = tk.Frame(self, bg=C["card"], padx=12, pady=10)
+        inner.pack(fill="both", expand=True)
+        tk.Label(inner, text=icon, bg=C["card"], fg=accent,
+                 font=("Segoe UI", 18)).pack(anchor="w")
+        tk.Label(inner, text=str(value), bg=C["card"], fg=accent,
+                 font=FONT_CARD_N).pack(anchor="w")
+        tk.Label(inner, text=label.upper(), bg=C["card"],
+                 fg=C["text_dim"], font=FONT_CARD_L).pack(anchor="w")
 
 
 # ── DETAIL PANEL ──────────────────────────────────────────────
 class DetailPanel(tk.Frame):
     def __init__(self, parent, **kw):
-        super().__init__(parent, bg=PANEL,
-                         highlightbackground=BORDER,
-                         highlightthickness=1,
-                         width=230, **kw)
+        super().__init__(parent, bg=C["sidebar"],
+                         highlightbackground=C["card_border"],
+                         highlightthickness=1, width=265, **kw)
         self.pack_propagate(False)
         self._idle()
 
     def _clear(self):
-        for w in self.winfo_children():
-            w.destroy()
+        for w in self.winfo_children(): w.destroy()
 
     def _idle(self):
         self._clear()
-        tk.Label(self, text="Select a plan\nto view details",
-                 bg=PANEL, fg=DIM,
-                 font=("Segoe UI", 9),
-                 justify="center").pack(expand=True)
+        tk.Label(self, text="📋\n\nSelect a plan\nto view full details",
+                 bg=C["sidebar"], fg=C["text_tiny"],
+                 font=("Segoe UI", 10), justify="center").pack(expand=True)
 
     def show(self, row):
         self._clear()
-        sc = sclr(row.get("status", ""))
-
-        # Coloured header
+        sc  = sclr(row.get("status",""))
         hdr = tk.Frame(self, bg=sc, padx=12, pady=10)
         hdr.pack(fill="x")
-        tk.Label(hdr, text=f"Plan  #{ row.get('test_plan_id', '') }",
-                 bg=sc, fg=WHITE,
-                 font=("Segoe UI", 8, "bold")).pack(anchor="w")
-        tk.Label(hdr,
-                 text=(row.get("test_plan_name") or "")[:30],
-                 bg=sc, fg=WHITE,
-                 font=("Segoe UI", 10, "bold"),
-                 wraplength=206, justify="left").pack(anchor="w", pady=(4, 0))
-        pill = tk.Frame(hdr, bg=WHITE, padx=6, pady=2)
-        pill.pack(anchor="w", pady=(6, 0))
+        top = tk.Frame(hdr, bg=sc)
+        top.pack(fill="x")
+        tk.Label(top, text=f"Plan #{row.get('test_plan_id','')}",
+                 bg=sc, fg="#FFFFFF", font=("Segoe UI", 8, "bold")).pack(side="left")
+        pill = tk.Frame(top, bg="#FFFFFF", padx=6, pady=1)
+        pill.pack(side="right")
         tk.Label(pill, text=(row.get("status") or "—").upper(),
-                 bg=WHITE, fg=sc,
-                 font=("Segoe UI", 7, "bold")).pack()
+                 bg="#FFFFFF", fg=sc, font=("Segoe UI", 7, "bold")).pack()
+        tk.Label(hdr, text=row.get("test_plan_name",""), bg=sc, fg="#FFFFFF",
+                 font=("Segoe UI", 11, "bold"),
+                 wraplength=240, justify="left").pack(anchor="w", pady=(4,0))
+
+        # Module badge
+        if row.get("module"):
+            mb = tk.Frame(hdr, bg=C["accent"], padx=7, pady=2)
+            mb.pack(anchor="w", pady=(6,0))
+            tk.Label(mb, text=f"📦  {row.get('module','')}",
+                     bg=C["accent"], fg="#FFFFFF",
+                     font=("Segoe UI", 8, "bold")).pack()
 
         # Scrollable body
-        outer = tk.Frame(self, bg=PANEL)
+        outer = tk.Frame(self, bg=C["sidebar"])
         outer.pack(fill="both", expand=True)
-        cv = tk.Canvas(outer, bg=PANEL, highlightthickness=0)
-        sb = tk.Scrollbar(outer, orient="vertical", command=cv.yview,
-                          width=6)
+        cv = tk.Canvas(outer, bg=C["sidebar"], highlightthickness=0)
+        sb = tk.Scrollbar(outer, orient="vertical", command=cv.yview, width=6)
         sb.pack(side="right", fill="y")
         cv.pack(side="left", fill="both", expand=True)
         cv.configure(yscrollcommand=sb.set)
-        body = tk.Frame(cv, bg=PANEL, padx=12, pady=10)
-        win  = cv.create_window((0, 0), window=body, anchor="nw")
-        body.bind("<Configure>",
-                  lambda e: cv.configure(scrollregion=cv.bbox("all")))
-        cv.bind("<Configure>",
-                lambda e: cv.itemconfig(win, width=e.width))
+        body = tk.Frame(cv, bg=C["sidebar"], padx=12, pady=10)
+        win  = cv.create_window((0,0), window=body, anchor="nw")
+        body.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        cv.bind("<Configure>", lambda e: cv.itemconfig(win, width=e.width))
 
-        fields = [
-            ("Module",       row.get("module")       or "—"),
-            ("Created By",   row.get("created_by")   or "—"),
-            ("Created Date", str(row.get("created_date") or "—")[:19]),
-            ("Description",  row.get("description")  or "—"),
-        ]
-        for lbl, val in fields:
-            tk.Label(body, text=lbl, bg=PANEL, fg=DIM,
-                     font=("Segoe UI", 7, "bold"),
-                     anchor="w").pack(fill="x", pady=(8, 1))
-            tk.Label(body, text=val, bg=PANEL, fg=TEXT,
-                     font=("Segoe UI", 9),
-                     wraplength=200, justify="left",
-                     anchor="w").pack(fill="x")
-            tk.Frame(body, bg=BORDER, height=1).pack(fill="x", pady=(6, 0))
+        for lbl, key in [("✍️  Created By",   "created_by"),
+                          ("📅  Created Date", "created_date"),
+                          ("📄  Description",  "description")]:
+            tk.Label(body, text=lbl, bg=C["sidebar"], fg=C["text_dim"],
+                     font=("Segoe UI", 8, "bold"), anchor="w").pack(fill="x", pady=(8,0))
+            val = str(row.get(key) or "—")
+            if key == "created_date": val = val[:19]
+            tk.Label(body, text=val, bg=C["sidebar"],
+                     fg=C["text_main"], font=("Segoe UI", 9),
+                     wraplength=235, justify="left", anchor="w").pack(fill="x")
+            tk.Frame(body, bg=C["card_border"], height=1).pack(fill="x", pady=(6,0))
+
+
+# ── QUANT PANEL ───────────────────────────────────────────────
+class QuantPanel(tk.Frame):
+    def __init__(self, parent, **kw):
+        super().__init__(parent, bg=C["bg"], width=270, **kw)
+        self.pack_propagate(False)
+        hdr = tk.Frame(self, bg=C["card_border"], height=32)
+        hdr.pack(fill="x"); hdr.pack_propagate(False)
+        tk.Label(hdr, text="📊  PLAN ANALYTICS", bg=C["card_border"],
+                 fg=C["text_dim"], font=FONT_SECT).pack(side="left", padx=10, pady=7)
+        self._body_frame = None
+
+    def refresh(self, plans, filtered):
+        if self._body_frame:
+            self._body_frame.destroy()
+
+        outer = tk.Frame(self, bg=C["bg"])
+        outer.pack(fill="both", expand=True)
+        cv = tk.Canvas(outer, bg=C["bg"], highlightthickness=0)
+        sb = tk.Scrollbar(outer, orient="vertical", command=cv.yview, width=6)
+        sb.pack(side="right", fill="y")
+        cv.pack(side="left", fill="both", expand=True)
+        cv.configure(yscrollcommand=sb.set)
+        body = tk.Frame(cv, bg=C["bg"])
+        win  = cv.create_window((0,0), window=body, anchor="nw")
+        body.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        cv.bind("<Configure>", lambda e: cv.itemconfig(win, width=e.width))
+        self._body_frame = outer
+
+        total   = len(plans)
+        visible = len(filtered)
+        active  = sum(1 for p in plans if (p.get("status") or "").lower() == "active")
+        draft   = sum(1 for p in plans if (p.get("status") or "").lower() == "draft")
+        done    = sum(1 for p in plans if (p.get("status") or "").lower() == "completed")
+        modules = len({p.get("module") for p in plans if p.get("module")})
+        authors = len({p.get("created_by") for p in plans if p.get("created_by")})
+
+        # KPI
+        sf = self._section(body, "KEY METRICS")
+        for lbl, val, clr in [
+            ("Total Plans",        total,   C["accent2"]),
+            ("Showing (filtered)", visible, C["teal"]),
+            ("Active",             active,  C["success"]),
+            ("Draft",              draft,   C["text_dim"]),
+            ("Completed",          done,    C["teal"]),
+            ("Modules",            modules, C["accent"]),
+            ("Authors",            authors, C["warning"]),
+        ]:
+            r = tk.Frame(sf, bg=C["card"])
+            r.pack(fill="x", pady=2)
+            tk.Label(r, text=lbl, bg=C["card"], fg=C["text_dim"],
+                     font=("Segoe UI", 8), anchor="w").pack(side="left")
+            tk.Label(r, text=str(val), bg=C["card"], fg=clr,
+                     font=("Segoe UI", 10, "bold")).pack(side="right")
+
+        # Status
+        sc_c = {}
+        for p in plans:
+            k = (p.get("status") or "Unknown").capitalize()
+            sc_c[k] = sc_c.get(k, 0) + 1
+        self._bar(body, "BY STATUS", sc_c, list(STATUS_COLORS.values()), total)
+
+        # Module
+        mod_c = {}
+        for p in plans:
+            k = p.get("module") or "Unknown"
+            mod_c[k] = mod_c.get(k, 0) + 1
+        self._bar(body, "BY MODULE", mod_c, MODULE_COLORS, total)
+
+        # Author
+        auth_c = {}
+        for p in plans:
+            k = p.get("created_by") or "Unknown"
+            auth_c[k] = auth_c.get(k, 0) + 1
+        top_auth = dict(sorted(auth_c.items(), key=lambda x: -x[1])[:7])
+        self._bar(body, "BY AUTHOR (TOP 7)", top_auth, MODULE_COLORS, total)
+
+    def _section(self, parent, title):
+        f = tk.Frame(parent, bg=C["card"],
+                     highlightbackground=C["card_border"], highlightthickness=1,
+                     padx=10, pady=8)
+        f.pack(fill="x", padx=6, pady=(0,8))
+        tk.Label(f, text=title, bg=C["card"], fg=C["text_dim"],
+                 font=FONT_SECT).pack(anchor="w")
+        tk.Frame(f, bg=C["card_border"], height=1).pack(fill="x", pady=(4,6))
+        return f
+
+    def _bar(self, parent, title, data_dict, colors, grand_total):
+        if not data_dict: return
+        f = self._section(parent, title)
+        max_v = max(data_dict.values(), default=1)
+        BAR_W = 118
+        for i, (k, v) in enumerate(sorted(data_dict.items(), key=lambda x: -x[1])):
+            clr = colors[i % len(colors)]
+            pct = round(100 * v / max(grand_total, 1), 1)
+            row = tk.Frame(f, bg=C["card"])
+            row.pack(fill="x", pady=2)
+            txt = (k[:12] + "…") if len(k) > 13 else k
+            tk.Label(row, text=txt, bg=C["card"], fg=C["text_main"],
+                     font=("Segoe UI", 7), width=12, anchor="w").pack(side="left")
+            cv2 = tk.Canvas(row, bg=C["card"], height=14, width=BAR_W, highlightthickness=0)
+            cv2.pack(side="left", padx=(2,0))
+            fw = int(BAR_W * v / max_v)
+            cv2.create_rectangle(0, 2, BAR_W, 12, fill=C["card_border"], outline="")
+            if fw: cv2.create_rectangle(0, 2, fw, 12, fill=clr, outline="")
+            tk.Label(row, text=f"{v} · {pct}%", bg=C["card"], fg=clr,
+                     font=("Segoe UI", 7, "bold"), width=9).pack(side="left", padx=2)
 
 
 # ── MAIN DASHBOARD ────────────────────────────────────────────
 class TestPlanDashboard:
-
     def __init__(self, root):
         self.root        = root
-        self.root.title("GRC360 — Test Plan Dashboard")
-        self.root.geometry("900x640")
-        self.root.resizable(False, False)
-        self.root.configure(bg=BG)
-
+        self.root.title("GRC360 — Test Plan Report Dashboard")
+        self.root.geometry("1480x830")
+        self.root.minsize(1100, 660)
+        self.root.configure(bg=C["bg"])
         self._plans      = []
         self._filtered   = []
         self._iid_map    = {}
@@ -162,106 +279,104 @@ class TestPlanDashboard:
         self._mod_var    = tk.StringVar(value="All Modules")
         self._stat_var   = tk.StringVar(value="All Status")
         self._sort_state = {}
-
         self._build_ui()
         self._load()
 
     def _build_ui(self):
-        # ── HEADER ──────────────────────────────────────────
-        hdr = tk.Frame(self.root, bg=HEADER, height=46)
-        hdr.pack(fill="x")
-        hdr.pack_propagate(False)
-        tk.Frame(hdr, bg=ACC, width=4).pack(side="left", fill="y")
-        tk.Label(hdr, text="📋  Test Plan Dashboard",
-                 bg=HEADER, fg=WHITE,
-                 font=("Segoe UI", 12, "bold")).pack(side="left", padx=12)
+        hdr = tk.Frame(self.root, bg=C["sidebar"], height=56)
+        hdr.pack(fill="x"); hdr.pack_propagate(False)
+        tk.Frame(hdr, bg=C["accent"], width=4).pack(side="left", fill="y")
+        cv = tk.Canvas(hdr, width=10, height=10, bg=C["sidebar"], highlightthickness=0)
+        cv.create_oval(0, 0, 10, 10, fill=C["accent"], outline="")
+        cv.pack(side="left", padx=(14,6), pady=23)
+        tk.Label(hdr, text="GRC360", bg=C["sidebar"], fg=C["text_main"],
+                 font=("Segoe UI", 15, "bold")).pack(side="left")
+        tk.Label(hdr, text="  /  Test Plan Report", bg=C["sidebar"],
+                 fg=C["text_dim"], font=("Segoe UI", 11)).pack(side="left")
         self._status_lbl = tk.Label(hdr, text="⏳  Loading…",
-                                    bg=HEADER, fg=GOLD,
+                                    bg=C["sidebar"], fg=C["warning"],
                                     font=("Segoe UI", 9))
-        self._status_lbl.pack(side="right", padx=10)
-        tk.Button(hdr, text="↺  Refresh",
-                  font=("Segoe UI", 9),
-                  bg=ACC, fg=WHITE, relief="flat", bd=0,
-                  padx=10, pady=3, cursor="hand2",
-                  activebackground="#5B21B6",
-                  command=self._load).pack(side="right", padx=(0, 8), pady=8)
+        self._status_lbl.pack(side="right", padx=18)
+        tk.Button(hdr, text="↺  Refresh", font=("Segoe UI", 9, "bold"),
+                  bg=C["accent"], fg="#FFFFFF", relief="flat", bd=0,
+                  padx=12, pady=4, cursor="hand2",
+                  activebackground="#5B21B6", activeforeground="#FFFFFF",
+                  command=self._load).pack(side="right", pady=14, padx=(0,8))
 
-        # ── STAT CARDS ──────────────────────────────────────
-        cards_row = tk.Frame(self.root, bg=BG)
-        cards_row.pack(fill="x", padx=12, pady=(10, 6))
-        self._c_total   = StatCard(cards_row, "Total Plans",  ACC)
-        self._c_active  = StatCard(cards_row, "Active",       GREEN)
-        self._c_modules = StatCard(cards_row, "Modules",      TEAL)
-        self._c_authors = StatCard(cards_row, "Authors",      GOLD)
-        for c in (self._c_total, self._c_active, self._c_modules, self._c_authors):
-            c.pack(side="left", expand=True, fill="x", padx=4)
+        body = tk.Frame(self.root, bg=C["bg"])
+        body.pack(fill="both", expand=True, padx=14, pady=10)
 
-        # ── TOOLBAR ─────────────────────────────────────────
-        tb = tk.Frame(self.root, bg=BG)
-        tb.pack(fill="x", padx=12, pady=(0, 6))
+        self._quant = QuantPanel(body)
+        self._quant.pack(side="right", fill="y", padx=(10,0))
 
-        sf = tk.Frame(tb, bg=WHITE,
-                      highlightbackground=BORDER, highlightthickness=1)
-        sf.pack(side="left")
-        tk.Label(sf, text=" 🔍", bg=WHITE, fg=DIM,
-                 font=("Segoe UI", 10)).pack(side="left")
-        tk.Entry(sf, textvariable=self._search_var,
-                 font=("Segoe UI", 9), bg=WHITE, fg=TEXT,
-                 insertbackground=TEXT, relief="flat", width=22).pack(
-                     side="left", ipady=5, padx=(2, 6))
+        self._detail = DetailPanel(body)
+        self._detail.pack(side="left", fill="y", padx=(0,10))
+
+        centre = tk.Frame(body, bg=C["bg"])
+        centre.pack(side="left", fill="both", expand=True)
+
+        self._cards_frame = tk.Frame(centre, bg=C["bg"])
+        self._cards_frame.pack(fill="x", pady=(0,10))
+
+        toolbar = tk.Frame(centre, bg=C["bg"])
+        toolbar.pack(fill="x", pady=(0,6))
+        sw = tk.Frame(toolbar, bg=C["input_bg"],
+                      highlightbackground=C["card_border"], highlightthickness=1)
+        sw.pack(side="left")
+        tk.Label(sw, text="🔍", bg=C["input_bg"], fg=C["text_dim"],
+                 font=("Segoe UI",10)).pack(side="left", padx=(8,4))
+        tk.Entry(sw, textvariable=self._search_var, font=FONT_SEARCH,
+                 bg=C["input_bg"], fg=C["input_fg"],
+                 insertbackground=C["input_fg"], relief="flat", width=22).pack(
+                     side="left", ipady=5, padx=(0,8))
         self._search_var.trace_add("write", lambda *_: self._filter())
 
         for var, attr in [(self._mod_var,  "_mod_menu"),
                           (self._stat_var, "_stat_menu")]:
-            btn = tk.Menubutton(tb, textvariable=var,
-                                font=("Segoe UI", 9), bg=WHITE, fg=TEXT,
-                                relief="solid", bd=1,
-                                padx=10, pady=5, cursor="hand2",
-                                indicatoron=True)
-            btn.pack(side="left", padx=(6, 0))
-            m = tk.Menu(btn, tearoff=0, bg=WHITE, fg=TEXT,
-                        activebackground=ACC,
-                        activeforeground=WHITE)
+            btn = tk.Menubutton(toolbar, textvariable=var, font=("Segoe UI",9),
+                                bg=C["input_bg"], fg=C["text_main"], relief="flat",
+                                highlightbackground=C["card_border"],
+                                highlightthickness=1, padx=10, pady=5,
+                                cursor="hand2", indicatoron=True)
+            btn.pack(side="left", padx=(8,0))
+            m = tk.Menu(btn, tearoff=0, bg=C["sidebar"], fg=C["text_main"],
+                        activebackground=C["accent"], activeforeground="#FFFFFF")
             btn["menu"] = m
             setattr(self, attr, m)
 
-        self._count_lbl = tk.Label(tb, text="", bg=BG, fg=DIM,
-                                   font=("Segoe UI", 8))
+        self._count_lbl = tk.Label(toolbar, text="", bg=C["bg"],
+                                   fg=C["text_dim"], font=("Segoe UI",9))
         self._count_lbl.pack(side="right")
 
-        # ── MAIN AREA ───────────────────────────────────────
-        main = tk.Frame(self.root, bg=BG)
-        main.pack(fill="both", expand=True, padx=12, pady=(0, 10))
+        self._table_frame = tk.Frame(centre, bg=C["bg"])
+        self._table_frame.pack(fill="both", expand=True)
+        self._build_table()
 
-        # Table
-        tframe = tk.Frame(main, bg=BG)
-        tframe.pack(side="left", fill="both", expand=True)
-
-        style = ttk.Style()
-        style.theme_use("clam")
+    def _build_table(self):
+        for w in self._table_frame.winfo_children(): w.destroy()
+        style = ttk.Style(); style.theme_use("clam")
         style.configure("TP.Treeview",
-                        background=WHITE, foreground=TEXT,
-                        fieldbackground=WHITE, rowheight=24,
-                        font=("Segoe UI", 9), borderwidth=0)
+                        background=C["row_even"], foreground=C["text_main"],
+                        fieldbackground=C["row_even"], rowheight=30,
+                        font=FONT_CELL, borderwidth=0)
         style.configure("TP.Treeview.Heading",
-                        background=HEADER, foreground=WHITE,
-                        font=("Segoe UI", 9, "bold"), relief="flat")
+                        background=C["sidebar"], foreground=C["text_dim"],
+                        font=FONT_HEAD, relief="flat", borderwidth=0)
         style.map("TP.Treeview",
-                  background=[("selected", ACC)],
-                  foreground=[("selected", WHITE)])
+                  background=[("selected", C["row_select"])],
+                  foreground=[("selected", "#FFFFFF")])
+        style.layout("TP.Treeview", [("TP.Treeview.treearea", {"sticky": "nswe"})])
 
-        vis    = ("test_plan_id", "test_plan_name", "module",
-                  "created_by", "created_date", "status")
-        labels = {"test_plan_id": "ID", "test_plan_name": "Plan Name",
-                  "module": "Module", "created_by": "Author",
-                  "created_date": "Created Date", "status": "Status"}
-        widths = {"test_plan_id": 40, "test_plan_name": 185,
-                  "module": 90, "created_by": 90,
-                  "created_date": 115, "status": 75}
+        vis    = ("test_plan_id","test_plan_name","module","created_by","created_date","status")
+        labels = {"test_plan_id":"ID","test_plan_name":"Plan Name",
+                  "module":"Module","created_by":"Author",
+                  "created_date":"Created Date","status":"Status"}
+        widths = {"test_plan_id":50,"test_plan_name":210,"module":110,
+                  "created_by":110,"created_date":115,"status":80}
 
-        wrap = tk.Frame(tframe, bg=BORDER, bd=1)
+        wrap = tk.Frame(self._table_frame, bg=C["bg"],
+                        highlightbackground=C["card_border"], highlightthickness=1)
         wrap.pack(fill="both", expand=True)
-
         self.tree = ttk.Treeview(wrap, columns=vis, show="headings",
                                   style="TP.Treeview", selectmode="browse")
         for c in vis:
@@ -269,29 +384,22 @@ class TestPlanDashboard:
                               command=lambda col=c: self._sort(col))
             self.tree.column(c, width=widths[c], anchor="w",
                              stretch=(c == "test_plan_name"))
-
-        vsb = ttk.Scrollbar(wrap, orient="vertical",   command=self.tree.yview)
-        hsb = ttk.Scrollbar(wrap, orient="horizontal",  command=self.tree.xview)
+        vsb = tk.Scrollbar(wrap, orient="vertical", command=self.tree.yview,
+                           bg=C["bg"], troughcolor=C["sidebar"])
+        vsb.pack(side="right", fill="y")
+        hsb = tk.Scrollbar(wrap, orient="horizontal", command=self.tree.xview,
+                           bg=C["bg"], troughcolor=C["sidebar"])
+        hsb.pack(side="bottom", fill="x")
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-        wrap.grid_rowconfigure(0, weight=1)
-        wrap.grid_columnconfigure(0, weight=1)
-
-        self.tree.tag_configure("even", background=REVE)
-        self.tree.tag_configure("odd",  background=WHITE)
-        for sk, clr in STATUS_C.items():
+        self.tree.pack(side="left", fill="both", expand=True)
+        self.tree.tag_configure("odd",  background=C["row_odd"])
+        self.tree.tag_configure("even", background=C["row_even"])
+        for sk, clr in STATUS_COLORS.items():
             self.tree.tag_configure(f"s_{sk}", foreground=clr)
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
-        # Detail panel
-        self._detail = DetailPanel(main)
-        self._detail.pack(side="right", fill="y", padx=(8, 0))
-
-    # ── DATA FLOW ────────────────────────────────────────────
     def _load(self):
-        self._status_lbl.config(text="⏳  Loading…", fg=GOLD)
+        self._status_lbl.config(text="⏳  Loading…", fg=C["warning"])
         threading.Thread(target=self._fetch, daemon=True).start()
 
     def _fetch(self):
@@ -303,21 +411,29 @@ class TestPlanDashboard:
 
     def _loaded(self, rows, err):
         if err:
-            self._status_lbl.config(text=f"❌ {err}", fg=ROSE)
+            self._status_lbl.config(text=f"❌ {err}", fg=C["danger"])
             messagebox.showerror("Error", err, parent=self.root)
             return
-
         self._plans = rows
-        self._status_lbl.config(text=f"●  {len(rows)} records", fg=GREEN)
+        self._status_lbl.config(text=f"●  {len(rows)} records", fg=C["success"])
 
-        active  = sum(1 for p in rows if (p.get("status") or "").lower() == "active")
-        modules = len({p.get("module") for p in rows if p.get("module")})
-        authors = len({p.get("created_by") for p in rows if p.get("created_by")})
+        total    = len(rows)
+        active   = sum(1 for p in rows if (p.get("status") or "").lower() == "active")
+        modules  = len({p.get("module") for p in rows if p.get("module")})
+        authors  = len({p.get("created_by") for p in rows if p.get("created_by")})
+        draft    = sum(1 for p in rows if (p.get("status") or "").lower() == "draft")
 
-        self._c_total.update_value(len(rows))
-        self._c_active.update_value(active)
-        self._c_modules.update_value(modules)
-        self._c_authors.update_value(authors)
+        # Stat cards
+        for w in self._cards_frame.winfo_children(): w.destroy()
+        for icon, lbl, val, color in [
+            ("📋", "Total Plans", total,   C["accent2"]),
+            ("✅", "Active",      active,  C["success"]),
+            ("📝", "Draft",       draft,   C["text_dim"]),
+            ("📦", "Modules",     modules, C["teal"]),
+            ("✍️", "Authors",     authors, C["warning"]),
+        ]:
+            StatCard(self._cards_frame, icon, lbl, val, color).pack(
+                side="left", fill="x", expand=True, padx=(0,8))
 
         all_mods  = sorted({p.get("module") or "Unknown" for p in rows})
         all_stats = sorted({(p.get("status") or "Unknown").capitalize() for p in rows})
@@ -345,12 +461,13 @@ class TestPlanDashboard:
         self._filtered = [
             p for p in self._plans
             if (mod == "All Modules" or p.get("module") == mod)
-            and (st  == "All Status" or (p.get("status") or "").lower() == st.lower())
+            and (st == "All Status" or (p.get("status") or "").lower() == st.lower())
             and (not q or any(q in str(v).lower() for v in p.values()))
         ]
         self._populate()
         self._count_lbl.config(
             text=f"{len(self._filtered)} / {len(self._plans)} records")
+        self._quant.refresh(self._plans, self._filtered)
 
     def _populate(self):
         self.tree.delete(*self.tree.get_children())
@@ -378,8 +495,7 @@ class TestPlanDashboard:
         sel = self.tree.selection()
         if sel:
             row = self._iid_map.get(sel[0])
-            if row:
-                self._detail.show(row)
+            if row: self._detail.show(row)
 
 
 # ── LAUNCHER ─────────────────────────────────────────────────
