@@ -22,6 +22,8 @@ from ui.Dashboards.test_steps_dashboard   import open_test_steps_dashboard
 from ui.Dashboards.test_results_dashboard import open_test_results_dashboard
 from ui.accept_issue import AcceptIssueScreen
 from ui.fix_issue import FixIssueScreen
+from ui.attribution_dashboard import open_attribution_dashboard
+from runners.attribution_report_runner import AttributionReportRunner
 
 agent = IntentAgent()
 
@@ -243,6 +245,18 @@ class GRC360ChatModel:
                  command=Test_Results_Dashboard_Screen,
                  ).pack(fill="x", padx=10, pady=(0, 4))
 
+        tk.Frame(body, bg="#344A63", height=1).pack(fill="x", padx=14, pady=(4, 8))
+        tk.Label(body, text="🔍  ATTRIBUTION",
+                 bg=CLR["sidebar_bg"], fg=CLR["sb_text_dim"],
+                 font=FT["section"]).pack(anchor="w", padx=14, pady=(0, 8))
+
+        DashTile(body,
+                 icon="🧾", title="Attribution Log",
+                 subtitle="AI audit trail · sources · decisions",
+                 accent="#6366F1",
+                 command=Attribution_Dashboard_Screen,
+                 ).pack(fill="x", padx=10, pady=(0, 4))
+
         # ── Status labels ──
         self.intent_label = tk.Label(
             body, text="Intent: —",
@@ -426,6 +440,17 @@ def Fix_Issue():
     root = tk.Toplevel()
     FixIssueScreen(root, "OWNER", "siri123")
 
+def Attribution_Dashboard_Screen():
+    open_attribution_dashboard(parent=None)
+
+def Save_Attribution_Report():
+    path = AttributionReportRunner().run()
+    top  = tk.Toplevel()
+    top.title("Report Saved")
+    top.geometry("400x100")
+    tk.Label(top, text=f"✅  Saved → {path}",
+             font=("Segoe UI", 10), wraplength=360).pack(expand=True)
+
 # ─────────────────────────────────────────────
 #  MAIN FORM
 # ─────────────────────────────────────────────
@@ -467,8 +492,10 @@ def start_main_form():
                                ("Test Results Dashboard",         Test_Results_Dashboard_Screen)])
     make_menu("Sub Process", [("Create Subprocess",              Create_SubProcess),
                                ("Subprocess Dashboard",           SubProcess_Dashboard_Screen)])
-    make_menu("Workflow",    [("Accept and Assign Issue",                  Accept_Issue),
-                               ("Fix Issue",                      Fix_Issue)])
+    make_menu("Workflow", [("Accept and Assign Issue",              Accept_Issue),
+                               ("Fix Issue",           Fix_Issue)])
+    make_menu("Attribution", [("Live Audit Dashboard",            Attribution_Dashboard_Screen),
+                               ("Save Report to File",            Save_Attribution_Report)])
     root.config(menu=menubar)
 
     workspace = tk.Frame(root, bg=CLR["app_bg"])
