@@ -1,0 +1,20 @@
+[
+  {
+    "record_id": "ae7c55d6-2599-45c0-b957-7f99beb9e1af",
+    "action_type": "rag_retrieval",
+    "actor_name": "GRC360 RAG Retrieval",
+    "confidence": "high",
+    "decision_summary": "RAG retrieved 3 result(s) for entity_type='PROCESS' (top_k=3)",
+    "timestamp": "2026-04-09 08:36:30",
+    "checksum": "d359b0b76d5be54f37968c45970109ee0e0a8f94590abac23666d1ff74b41d08"
+  },
+  {
+    "record_id": "35062d1e-58f8-41d7-adad-b48d5f3084c8",
+    "action_type": "intent_classification",
+    "actor_name": "Groq LLaMA 3.3 70B",
+    "confidence": "high",
+    "decision_summary": "Intent classified as: CREATE_PROCESS",
+    "timestamp": "2026-04-09 08:28:52",
+    "checksum": "b37359702d85ec3345145aabc0f2ec1e11322dd118d883c1144afc09b402f64a"
+  }
+]
