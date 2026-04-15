@@ -125,7 +125,7 @@ class DetailPanel(tk.Frame):
     def __init__(self, parent, **kw):
         super().__init__(parent, bg=C["sidebar"],
                          highlightbackground=C["card_border"],
-                         highlightthickness=1, width=270, **kw)
+                         highlightthickness=1, width=210, **kw)
         self.pack_propagate(False)
         self._build_empty()
 
@@ -249,23 +249,23 @@ class QuantPanel(tk.Frame):
         depts    = len({r.get("department") for r in subprocesses if r.get("department")})
 
         # ── KPI card ──────────────────────────────────────
-        sf = self._section(body, "KEY METRICS")
-        for lbl, val, clr in [
-            ("Total Subprocesses",   total,    C["accent2"]),
-            ("Showing (filtered)",   visible,  C["teal"]),
-            ("Active",               active,   C["success"]),
-            ("Inactive",             inactive, C["danger"]),
-            ("Linked to a Process",  linked,   C["purple"]),
-            ("Not Linked",           unlinked, C["text_dim"]),
-            ("Unique Owners",        owners,   C["warning"]),
-            ("Departments",          depts,    C["accent"]),
-        ]:
-            r = tk.Frame(sf, bg=C["card"])
-            r.pack(fill="x", pady=2)
-            tk.Label(r, text=lbl, bg=C["card"], fg=C["text_dim"],
-                     font=("Segoe UI", 8), anchor="w").pack(side="left")
-            tk.Label(r, text=str(val), bg=C["card"], fg=clr,
-                     font=("Segoe UI", 10, "bold")).pack(side="right")
+        # sf = self._section(body, "KEY METRICS")
+        # for lbl, val, clr in [
+        #     ("Total Subprocesses",   total,    C["accent2"]),
+        #     ("Showing (filtered)",   visible,  C["teal"]),
+        #     ("Active",               active,   C["success"]),
+        #     ("Inactive",             inactive, C["danger"]),
+        #     ("Linked to a Process",  linked,   C["purple"]),
+        #     ("Not Linked",           unlinked, C["text_dim"]),
+        #     ("Unique Owners",        owners,   C["warning"]),
+        #     ("Departments",          depts,    C["accent"]),
+        # ]:
+        #     r = tk.Frame(sf, bg=C["card"])
+        #     r.pack(fill="x", pady=2)
+        #     tk.Label(r, text=lbl, bg=C["card"], fg=C["text_dim"],
+        #              font=("Segoe UI", 8), anchor="w").pack(side="left")
+        #     tk.Label(r, text=str(val), bg=C["card"], fg=clr,
+        #              font=("Segoe UI", 10, "bold")).pack(side="right")
 
         # ── Status breakdown ──────────────────────────────
         sc_c = {}
@@ -290,12 +290,12 @@ class QuantPanel(tk.Frame):
         self._bar(body, "BY FREQUENCY", freq_c, DEPT_COLORS, total)
 
         # ── Parent process distribution ───────────────────
-        pp_c = {}
-        for r in subprocesses:
-            k = r.get("process_name") or "⚠ Unlinked"
-            pp_c[k] = pp_c.get(k, 0) + 1
-        top_pp = dict(sorted(pp_c.items(), key=lambda x: -x[1])[:8])
-        self._bar(body, "BY PARENT PROCESS", top_pp, DEPT_COLORS, total)
+        # pp_c = {}
+        # for r in subprocesses:
+        #     k = r.get("process_name") or "⚠ Unlinked"
+        #     pp_c[k] = pp_c.get(k, 0) + 1
+        # top_pp = dict(sorted(pp_c.items(), key=lambda x: -x[1])[:8])
+        # self._bar(body, "BY PARENT PROCESS", top_pp, DEPT_COLORS, total)
 
     # ── helpers ───────────────────────────────────────────
     def _section(self, parent, title):
@@ -559,8 +559,8 @@ class SubprocessDashboard:
             ("✅", "Active",              active,   C["success"]),
             ("🔴", "Inactive",            inactive, C["danger"]),
             ("🔗", "Linked to Process",   linked,   C["purple"]),
-            ("🏢", "Departments",         depts,    C["warning"]),
-            ("👤", "Unique Owners",       owners,   C["teal"]),
+            # ("🏢", "Departments",         depts,    C["warning"]),
+            # ("👤", "Unique Owners",       owners,   C["teal"]),
         ]:
             StatCard(self._cards_frame, icon, lbl, val, color).pack(
                 side="left", fill="x", expand=True, padx=(0,6))
