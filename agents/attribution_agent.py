@@ -31,6 +31,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional
 from enum import Enum
 from connectors.lambda_mysql import call_lambda
+from services.rag_service import save_process_to_rag
 
 
 # ─────────────────────────────────────────────
@@ -216,7 +217,8 @@ class AttributionAgent:
         )
         rec.checksum = self._checksum(rec)
         self._log.append(rec)
-        self._save_to_db(rec)
+        id = self._save_to_db(rec)
+        save_process_to_rag("ATTRIBUTION_LOG", rec, id)
         print(f"[ATTRIBUTION] {action_type.value} → {rec.record_id[:8]}…  actor={actor.name}")
         return rec
 
@@ -353,10 +355,12 @@ class AttributionAgent:
         }
 
         try:
-            call_lambda(payload)
+            result = call_lambda(payload)
+            insertedid = result.get("inserted_id")  
         except Exception as e:
             print("❌ Attribution DB ERROR:", e)
-
+            
+        return insertedid
 
 # ─────────────────────────────────────────────
 # Singleton — import and use everywhere
