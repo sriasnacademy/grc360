@@ -1,3 +1,5 @@
+import json
+
 def build_rag_payload(entity_type: str, data: dict) -> dict:
 
     # ──────────────────────────────────────────────────────────
@@ -224,6 +226,82 @@ Control Area: {data.get('control_area')}
                 "control_assertion": data.get("control_assertion"),
             }
         }
+    
+    elif entity_type == "ATTRIBUTION_LOG":
+        receivedpayload = build_attribution_payload(data)
+        return receivedpayload
 
     else:
         raise ValueError(f"Unsupported entity type: {entity_type}")
+
+def build_attribution_payload(rec, verify_fn=None):
+    if not rec:
+        return {}
+
+    # Safe extraction
+    record_id   = rec.record_id
+    timestamp   = rec.timestamp
+    action      = rec.action_type
+    actor       = rec.actor
+    confidence  = rec.confidence.value.upper()
+    decision    = rec.decision_summary
+    reasoning   = rec.reasoning
+    checksum    = rec.checksum
+
+    # Optional JSON fields
+    
+    fw = ", ".join(rec.framework_refs) or "None"
+    Tags   = {', '.join(rec.tags) or 'none'}
+
+    src_lines = "\n".join(
+            f"  [{i+1}] {s.name} ({s.source_type}) — {s.reference}"
+            f"{(' | ' + s.excerpt[:100]) if s.excerpt else ''}"
+            f" [relevance: {s.relevance_score:.0%}]"
+            for i, s in enumerate(rec.sources)
+        )
+    
+    Sources = src_lines or '(none)'
+
+    integrity = "valid"
+    if verify_fn:
+        integrity = "valid" if verify_fn(record_id) else "tampered"
+    else:
+        integrity = "valid" if checksum else "tampered"
+
+
+    # ✅ FINAL PAYLOAD
+    return {
+        "rag_text": f"""
+Attribution Report
+Record ID: {record_id}
+Timestamp: {timestamp}
+Action: {action}
+Actor: {actor}
+Confidence: {confidence}
+Frameworks: {fw}
+Tags: {Tags}
+
+Decision:
+{decision}
+
+Reasoning:
+{reasoning}
+
+Sources ({len(Sources)}):
+{src_lines}
+
+Integrity: {integrity}
+Checksum: {checksum}
+""".strip(),
+
+        "source_table": "attribution_records",
+
+        "metadata": {
+            "record_id": record_id,
+            "action_type": action,
+            "actor_name": actor,
+            "confidence": confidence,
+            "timestamp": timestamp,
+            "integrity": integrity
+        }
+    }
