@@ -241,8 +241,9 @@ def build_attribution_payload(rec, verify_fn=None):
     # Safe extraction
     record_id   = rec.record_id
     timestamp   = rec.timestamp
-    action      = rec.action_type
-    actor       = rec.actor
+    action      = rec.action_type.value
+    actor       = f"{rec.actor.name} ({rec.actor.actor_type.value})" \
+        f"{f' v{rec.actor.version}' if rec.actor.version else ''}"
     confidence  = rec.confidence.value.upper()
     decision    = rec.decision_summary
     reasoning   = rec.reasoning
