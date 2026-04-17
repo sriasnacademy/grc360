@@ -138,6 +138,7 @@ ACTION_COLORS = {
     "risk_pipeline": "#F97316",
     "process_pipeline": "#0EA5E9",
     "subprocess_pipeline": "#8B5CF6",
+    "rag_retrieval":"#04618B"
 }
 
 
