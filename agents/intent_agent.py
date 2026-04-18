@@ -37,12 +37,30 @@ class IntentAgent:
 ### Input:
 {raw_text}
 
+### Available Intents (Choose ONLY one):
+- CREATE_PROCESS, CREATE_RISK, CREATE_CONTROL, CREATE_SUBPROCESS, CREATE_TEST_PLAN
+- QUERY_PROCESS, QUERY_RISK, QUERY_CONTROL, QUERY_SUBPROCESS, QUERY_TEST_PLAN
+- REPORT_STATISTICAL, REPORT_CONFIDENCE, REPORT_AUDIT_TRAIL, REPORT_ENHANCED, REPORT_GENERAL
+- LINK_PROCESS_SUBPROCESS, LINK_PROCESS_RISK, LINK_RISK_CONTROL, LINK_TEST_PLAN_CONTROL etc.
+- OTHER
+
 ### Rules:
-Return STRICT JSON only.
-No markdown.
+- If the user asks for **statistics, confidence levels, audit trail, trends, summary, analytics, or report** → use one of the REPORT_* intents.
+- Examples:
+  - "show me confidence levels across pipelines" → REPORT_CONFIDENCE
+  - "statistical report on controls" → REPORT_STATISTICAL
+  - "enhanced audit trail" → REPORT_AUDIT_TRAIL
+  - "summary of all AI decisions" → REPORT_GENERAL
+- For simple "show me processes" or "view risks" → use QUERY_*
+- Return STRICT JSON only. No markdown.
+
 Format:
-{{ "intent": "VALUE" }}
+{{
+  "intent": "REPORT_CONFIDENCE",
+  "confidence": 85
+}}
 """
+
             response = self.llm.generate(prompt)
             print("🔍 RAW INTENT AI:", repr(response))
 
